@@ -31,7 +31,7 @@ is extracted only once a second client is in use (see DESIGN.md).
 
 | Plugin | Skills |
 |---|---|
-| `pr` | `/pr:review` |
+| `pr` | `/pr:review`, `/pr:address` |
 
 ## Install
 

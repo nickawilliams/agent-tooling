@@ -304,7 +304,7 @@ refactor, not a plain move.
 |---|---|---|
 | `review` | `/pr:review` | Moved as is; description no longer claims `/review` |
 | `review-slack` | `/pr:sweep` | Reworked: adds GitHub review requests as a source |
-| `coderabbit` | `/pr:address` | Renamed; may later cover human review comments |
+| `coderabbit` | `/pr:address` | Generalized: any reviewer's inline threads, not just CodeRabbit |
 
 - A personal standalone skill at `clients/claude/skills/review/` claims
   `/review` and forwards to `/pr:review`. It stays outside the plugin.
@@ -319,13 +319,17 @@ refactor, not a plain move.
 
 Phases, each committed to `main` on its own and leaving things working:
 
-1. **Move `review`.** *Done 2026-10-28.* Root `marketplace.json`, `clients/claude/plugins/pr/`
-   with `plugin.json`, `review` copied with minimal edits, the `/review`
-   forwarder and its symlink setup. Validate, install `pr@nickawilliams`
-   from the local checkout, compare a real review against the old skill,
-   then delete the Clearstory copy.
-2. **Move `coderabbit` to `address`.** Rename, update the description and
-   triggers, test on a PR, delete the old copy.
+1. **Move `review`.** *Done 2026-10-28.* Root `marketplace.json`,
+   `clients/claude/plugins/pr/` with `plugin.json`, `review` copied with
+   minimal edits, the `/review` forwarder and its symlink setup. Validate,
+   install `pr@nickawilliams` from the local checkout, compare a real
+   review against the old skill, then delete the Clearstory copy.
+2. **Generalize `coderabbit` into `address`.** Every reviewer's unresolved
+   inline threads (narrowed by `--from`), judged on the whole
+   conversation. Every fixed or skipped thread gets a reply, and
+   `--resolve=on|off` (default `on`) decides whether it is then resolved.
+   Commits follow the repo's own conventions rather than a hardcoded Jira
+   scope. Test on a PR, then delete the old copy.
 3. **Rework `review-slack` into `sweep`.** The one real redesign: start it
    in plan mode. Add the GitHub source, invoke `/pr:review` by full name,
    keep `--yes` and the posting flags. Test locally, delete the old copy.
