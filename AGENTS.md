@@ -18,7 +18,7 @@ choosing, then record the answer in `DESIGN.md`.
 ## Commits
 
 Commits follow Conventional Commits: `type(scope): summary`. The scope is
-the item or area the change touches, such as `feat(pr-autoreview)` or
+the item or area the change touches, such as `feat(pr)` or
 `build(ci)`.
 
 Start the summary in lowercase and don't end it with a period:

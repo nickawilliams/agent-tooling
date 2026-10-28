@@ -131,11 +131,27 @@ start repeating across clients, move them to `common/packages/`.
 Once `common/` exists, a plugin will need to pull items in from it. See
 the open questions on includes.
 
+### Standalone skills
+
+*Not yet.* The first one arrives with the `pr` plugin.
+
+A skill that isn't part of any plugin lives at
+`clients/claude/skills/<name>/`, and its setup step symlinks it into
+`~/.claude/skills/<name>`. Use this for skills that must not ship inside a
+plugin, such as personal overrides of built-in command names (see
+[Command names](#command-names)). A plugin reaches everyone who installs
+it; these reach only my machines.
+
 ## Distribution
 
 ### Root marketplace on `main`
 
 *Not yet.* Takes effect with the first plugin.
+
+The marketplace is named `nickawilliams`, the same identifier as my npm
+scope, so install ids read `<plugin>@nickawilliams`. A generic name such as
+`agent-tooling` adds no information and is likelier to collide with another
+marketplace on the same machine.
 
 `.claude-plugin/marketplace.json` sits at the root of `main`, with entries
 pointing straight at `./clients/claude/plugins/<name>`. `main` is then
@@ -177,13 +193,36 @@ Recheck before relying on them.
 - `owner/repo@ref` and `owner/repo#ref` both pin a branch or tag.
 - Relative plugin sources must start with `./` and must not contain `..`.
   Each entry's `name` must match the `name` in that plugin's `plugin.json`.
-- A local directory marketplace keeps only symlinks that resolve inside the
-  plugin's own directory. A git-hosted one dereferences symlinks to
-  elsewhere in the marketplace.
+- A plugin can't declare components outside its own directory: a `..`
+  path or a symlink leading out of the plugin is rejected. The exception is
+  a symlink to another plugin in the same marketplace (rechecked
+  2026-10-28). A plugin can also declare `dependencies` on other plugins.
 - A directory marketplace reads plugins in place: edits apply at the next
   session start or on `/reload-plugins`.
 - Not chosen: a `command` plugin source runs a command at install time and
   installs the directory it prints.
+
+### Command names
+
+*Adopted.* Reference facts, from the docs and tests on Claude Code 2.1.308
+(2026-10-28).
+
+- A plugin skill always runs as `/<plugin>:<skill>`. It also answers to the
+  bare `/<skill>`, but only while no other command uses that name. The
+  plugin name is never a command on its own. A skill named after its
+  plugin is what makes `/<plugin>` work.
+- When names collide, the bare name goes to, in order: a personal skill,
+  a project skill, a built-in command or alias, then a plugin skill.
+- So a plugin skill can't take a name a built-in alias holds, such as
+  `/review` (an alias of `/code-review`). Setting `skillOverrides` to turn
+  `code-review` off doesn't free the alias, it just makes `/review` fail.
+  `disableBundledSkills` frees it, but turns off every bundled skill.
+- To claim such a name, use a personal [standalone skill](#standalone-skills)
+  that forwards to the plugin skill, with `disable-model-invocation: true`
+  so Claude only sees the real one. Keep it out of the plugin, so other
+  people who install the plugin keep the built-in.
+- Skills that call each other, and routine prompts, use the full
+  `/<plugin>:<skill>` name, which a later install can't take over.
 
 ## Consumers
 
@@ -242,13 +281,9 @@ next to the thing it sets up:
   inside a file. A common `SKILL.md` can link to a file only the overlay
   supplies.
 - **Plugin-private versus shared items.** Likely rule: an item lives inside
-  its plugin unless it is portable or shared.
-- **Standalone skills.** A Claude marketplace lists only plugins. Options:
-  one wrapper plugin per skill, one catch-all plugin, a `~/.claude/skills`
-  install, or a repo-level `.claude/skills/` (which cloud routines also
-  read).
-- **Marketplace name.** It is part of every install id
-  (`<plugin>@<marketplace>`), so choose it before the first install.
+  its plugin unless it is portable or shared. A plugin that needs another
+  plugin's skill can invoke it by full name and declare a `dependencies`
+  entry, so sharing doesn't force a build step.
 - **Routines, unverified:**
   - whether a routine can clone a non-default branch;
   - whether `gh` is installed and authenticated in the cloud VM;
@@ -257,13 +292,44 @@ next to the thing it sets up:
 
 ## Planned additions
 
-- **`pr-autoreview`** (tentative name): automates my PR review skill.
-  - Brings in the `review` and `review-slack` skills from
-    `~/Dropbox/Projects/Clearstory/.claude/skills/`, with near-copies in
-    `~/Projects/Clearstory/.claude/skills/`. `review-slack` may become
-    `review-queue`, adding a GitHub source and a single-PR mode.
-  - Runs as a cloud routine with an API trigger, fired by a local launchd
-    job while the Mac is awake, plus an hourly schedule as a fallback.
-  - Includes an idempotent `autoreview-setup` skill with a `doctor` mode.
-  - Belongs in `clients/claude/` because `review` names `AskUserQuestion`
-    throughout.
+### `pr` plugin
+
+Pull request skills, ported from
+`~/Dropbox/Projects/Clearstory/.claude/skills/` (`~/Projects/Clearstory` is a
+symlink to the same directory, so each exists once). It's a port and
+refactor, not a plain move.
+
+| From | To | Change |
+|---|---|---|
+| `review` | `/pr:review` | Moved as is; description no longer claims `/review` |
+| `review-slack` | `/pr:sweep` | Reworked: adds GitHub review requests as a source |
+| `coderabbit` | `/pr:address` | Renamed; may later cover human review comments |
+
+- A personal standalone skill at `clients/claude/skills/review/` claims
+  `/review` and forwards to `/pr:review`. It stays outside the plugin.
+- `sweep` only finds PRs and reviews each with `/pr:review`. It has no
+  single-PR mode; a routine fired for one PR invokes `/pr:review` directly.
+- Automation: a cloud routine with an API trigger, fired by a local launchd
+  job while the Mac is awake, plus an hourly schedule as a fallback. The
+  routine's prompt reads each `SKILL.md` by path and passes every posting
+  flag explicitly, since nobody is there to answer a prompt.
+- Belongs in `clients/claude/` because `review` names `AskUserQuestion`
+  throughout.
+
+Phases, each committed to `main` on its own and leaving things working:
+
+1. **Move `review`.** Root `marketplace.json`, `clients/claude/plugins/pr/`
+   with `plugin.json`, `review` copied with minimal edits, the `/review`
+   forwarder and its symlink setup. Validate, install `pr@nickawilliams`
+   from the local checkout, compare a real review against the old skill,
+   then delete the Clearstory copy.
+2. **Move `coderabbit` to `address`.** Rename, update the description and
+   triggers, test on a PR, delete the old copy.
+3. **Rework `review-slack` into `sweep`.** The one real redesign: start it
+   in plan mode. Add the GitHub source, invoke `/pr:review` by full name,
+   keep `--yes` and the posting flags. Test locally, delete the old copy.
+4. **Create the routine by hand.** Run it once to answer the three
+   unverified routine questions (above), and record the results here.
+5. **Local trigger and setup.** The fire script, the launchd plist, the
+   `/fire` token in the Keychain, an idempotent setup skill with a `doctor`
+   mode, and the README checklist.
