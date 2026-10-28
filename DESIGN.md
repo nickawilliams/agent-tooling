@@ -290,11 +290,15 @@ next to the thing it sets up:
   `task`, the recurring entry point a routine invokes. Named for the idea
   rather than Claude's term, since the docs now call routines "scheduled
   tasks". Decide when a second plugin needs one.
-- **Routines, unverified:**
-  - whether a routine can clone a non-default branch;
-  - whether `gh` is installed and authenticated in the cloud VM;
-  - whether a routine's API trigger and token can be created
-    programmatically.
+- **Routines.** Answered by the `pr` routine's first runs (2026-10-28):
+  - `gh` is installed and works, but `gh auth status` fails: `GH_TOKEN`
+    is a placeholder and a proxy attaches credentials per request. Check
+    with a real call such as `gh api user`.
+  - claude.ai connectors (Slack) work, including writes such as reactions.
+  - A routine can be created with `RemoteTrigger` (via `/schedule`), but
+    the API trigger and its token were added in the web UI; the create call
+    takes no trigger fields. The server also jitters the cron minute.
+  - Still unverified: whether a routine can clone a non-default branch.
 
 ## Planned additions
 
@@ -361,9 +365,12 @@ Phases, each committed to `main` on its own and leaving things working:
    reviewed again, while a Slack-only PR I've reviewed is still skipped.
    Dispatches `/pr:review` by full name with every flag pinned, including
    `--watch=off`. Test locally, delete the old copy.
-4. **Write `automate`'s `task` and create the routine by hand.** Run it
-   once to answer the three unverified routine questions (above), and
-   record the results here.
+4. **Write `automate`'s `task` and create the routine by hand.** *Done
+   2026-10-28.* Routine `pr-automate` (`trig_01XXU4R1jZS6UX7gqQF4P1AE`):
+   hourly, Opus, Slack connector, prompt passes `--channel=bb-prs`. Its API
+   trigger URL and token are in 1Password at
+   `op://Clearstory/clearstory-anthropic-trigger-pr-automate/{url,credential}`.
+   The first full run staged a pending review and marked Slack messages.
 5. **`automate`'s `install`, `doctor`, and `off`.** The fire script, the
-   launchd plist, the `/fire` token in the Keychain, the routine itself
-   from `userConfig`, and the README checklist.
+   launchd plist, the `/fire` token read from 1Password with `op read`,
+   the routine itself from `userConfig`, and the README checklist.
