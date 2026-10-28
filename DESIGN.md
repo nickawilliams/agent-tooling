@@ -303,7 +303,7 @@ refactor, not a plain move.
 | From | To | Change |
 |---|---|---|
 | `review` | `/pr:review` | Moved as is; description no longer claims `/review` |
-| `review-slack` | `/pr:sweep` | Reworked: adds GitHub review requests as a source |
+| `review-slack` | `/pr:sweep` | Reworked: adds GitHub review requests; channel is a plugin setting |
 | `coderabbit` | `/pr:address` | Generalized: any reviewer's inline threads, not just CodeRabbit |
 
 - A personal standalone skill at `clients/claude/skills/review/` claims
@@ -330,9 +330,14 @@ Phases, each committed to `main` on its own and leaving things working:
    `--resolve=on|off` (default `on`) decides whether it is then resolved.
    Commits follow the repo's own conventions rather than a hardcoded Jira
    scope. Test on a PR, then delete the old copy.
-3. **Rework `review-slack` into `sweep`.** The one real redesign: start it
-   in plan mode. Add the GitHub source, invoke `/pr:review` by full name,
-   keep `--yes` and the posting flags. Test locally, delete the old copy.
+3. **Rework `review-slack` into `sweep`.** Planned in plan mode. Adds
+   GitHub review requests (`gh search prs --review-requested=@me`) beside
+   Slack, picked with a positional `slack|github`. The channel moves to the
+   plugin's `slack_channel` setting; with none, Slack is skipped. Skips
+   drafts and PRs with a pending review of mine; a GitHub re-request is
+   reviewed again, while a Slack-only PR I've reviewed is still skipped.
+   Dispatches `/pr:review` by full name with every flag pinned, including
+   `--watch=off`. Test locally, delete the old copy.
 4. **Create the routine by hand.** Run it once to answer the three
    unverified routine questions (above), and record the results here.
 5. **Local trigger and setup.** The fire script, the launchd plist, the

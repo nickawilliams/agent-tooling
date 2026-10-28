@@ -4,5 +4,12 @@
   "author": {
     "name": "nickawilliams"
   },
-  "repository": "https://github.com/nickawilliams/agent-tooling"
+  "repository": "https://github.com/nickawilliams/agent-tooling",
+  "userConfig": {
+    "slack_channel": {
+      "type": "string",
+      "title": "Slack PR channel",
+      "description": "Channel /pr:sweep checks for pull request links, e.g. bb-prs. Leave empty to use GitHub review requests only."
+    }
+  }
 }
