@@ -307,8 +307,17 @@ back-references stay stable.
 
 ## 4. Write the artifact
 
-Write the complete record to `review-pr-<n>.json` in the session scratchpad
-directory. Outside the repo, so it cannot be committed by accident.
+Write the complete record to `review-pr-<n>.json` in this PR's working
+directory, `<scratchpad>/review/<owner>-<repo>-<n>/`, under the session
+scratchpad. Outside the repo, so it cannot be committed by accident.
+
+Keep **every** file this review creates in that directory: the artifact,
+the post payload, and any diffs, API responses, or fetched sources. Several
+reviews can run at once in one session (`pr:sweep` dispatches them to
+subagents that share the scratchpad), and a file named only by its
+contents, such as `pr.diff`, would be overwritten by a sibling. Naming the
+directory by owner and repo as well as number also keeps two PRs that share
+a number in different repos apart.
 
 ```json
 {
@@ -771,7 +780,7 @@ that takes five short sentences to say the same thing.
 
 ### Stage: no pending review yet
 
-Write the payload to the session scratchpad as `review-pr-<n>-post.json`:
+Write the payload to the PR's working directory as `review-pr-<n>-post.json`:
 
 ```json
 {
@@ -791,7 +800,8 @@ Write the payload to the session scratchpad as `review-pr-<n>-post.json`:
 Omitting `event` is deliberate: it leaves the review pending. Post it with:
 
 ```bash
-gh api repos/<owner>/<repo>/pulls/<n>/reviews --input review-pr-<n>-post.json
+gh api repos/<owner>/<repo>/pulls/<n>/reviews \
+  --input <scratchpad>/review/<owner>-<repo>-<n>/review-pr-<n>-post.json
 ```
 
 The review body contains only findings that could not be anchored to a diff
@@ -1020,8 +1030,8 @@ network blip does not read as a closed PR.
 
 ### A round
 
-1. Rename the artifact to `review-pr-<n>.<old sha7>.json` so the prior round
-   survives the rebuild.
+1. Rename the artifact to `review-pr-<n>.<old sha7>.json`, in the same
+   working directory, so the prior round survives the rebuild.
 2. Run stages 1 through 5. The sha has moved, so **Re-running** rebuilds the
    artifact, and deduplication keeps findings already commented on out of the
    new review.
@@ -1058,7 +1068,8 @@ state survive a run, and each is reconciled differently.
 
 ### The artifact is a cache
 
-If `review-pr-<n>.json` exists for this PR and its `pr.head_sha` matches the
+If `review-pr-<n>.json` exists in this PR's working directory and its
+`pr.head_sha` matches the
 live `headRefOid`, reuse it. Do not re-review: the skill's claim is that the
 same commit yields the same findings, and re-deriving them contradicts it while
 costing a full pass. Report that the artifact was reused and name `--fresh`,
