@@ -58,6 +58,25 @@ the prompt text. A cloud routine doesn't load plugins, so:
   would ask, use the fixed values below instead, and in review mode end
   your turn with the options written out (step 5).
 
+GitHub access in a routine is narrower than on a workstation. These apply
+to every skill this section runs:
+
+- **Attach a repository before calling its API.** A session can only reach
+  the repositories attached to it. Before any `gh api repos/<owner>/<repo>/…`
+  call, attach it with the `add_repo` tool, with `access: "push"` so
+  reviews can be posted. If it can't be attached, the credential has no
+  access: treat the PR as unreadable and say so.
+- **Search with the GitHub MCP tool.** `gh search` and the REST search API
+  are both blocked. Where a skill runs `gh search prs --review-requested=@me`,
+  use the GitHub MCP tool `search_pull_requests` with the query
+  `is:open is:pr review-requested:<login>` instead.
+- **No GraphQL.** `gh api graphql` and anything built on it are blocked. Use
+  REST. For review threads and resolving them, use the CCR routes:
+  `GET /repos/<owner>/<repo>/pulls/<n>/ccr/review_threads` and
+  `POST /repos/<owner>/<repo>/pulls/<n>/ccr/comments/<comment_id>/resolve`.
+  A step with no REST equivalent fails here; report it rather than
+  improvising.
+
 ### Arguments
 
 - `--mode=<discover|review>`: required. Set by the routine's prompt, never
