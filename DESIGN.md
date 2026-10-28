@@ -285,6 +285,11 @@ next to the thing it sets up:
   its plugin unless it is portable or shared. A plugin that needs another
   plugin's skill can invoke it by full name and declare a `dependencies`
   entry, so sharing doesn't force a build step.
+- **An `automate` convention.** Candidate: a plugin with automation exposes
+  an `automate` skill with `install` (default), `doctor`, `off`, and
+  `task`, the recurring entry point a routine invokes. Named for the idea
+  rather than Claude's term, since the docs now call routines "scheduled
+  tasks". Decide when a second plugin needs one.
 - **Routines, unverified:**
   - whether a routine can clone a non-default branch;
   - whether `gh` is installed and authenticated in the cloud VM;
@@ -311,9 +316,23 @@ refactor, not a plain move.
 - `sweep` only finds PRs and reviews each with `/pr:review`. It has no
   single-PR mode; a routine fired for one PR invokes `/pr:review` directly.
 - Automation: a cloud routine with an API trigger, fired by a local launchd
-  job while the Mac is awake, plus an hourly schedule as a fallback. The
-  routine's prompt reads each `SKILL.md` by path and passes every posting
-  flag explicitly, since nobody is there to answer a prompt.
+  job while the Mac is awake, plus an hourly schedule as a fallback. It's
+  managed by a fourth skill, `/pr:automate`:
+
+  | Command | Runs | Does |
+  |---|---|---|
+  | `/pr:automate` (`install`) | my Mac | create or update the routine and local trigger |
+  | `/pr:automate doctor` | my Mac | check both are healthy |
+  | `/pr:automate off` | my Mac | remove the trigger, disable the routine |
+  | `/pr:automate task` | the routine | sweep, or review the PR a fire payload names, every flag pinned |
+
+  The routine's stored prompt is one line: read
+  `clients/claude/plugins/pr/skills/automate/SKILL.md` and follow its
+  `task` section. agent-tooling is public, so anyone's routine can clone
+  it, and behavior changes are commits rather than routine edits. Per-user
+  values (`slack_channel`, the schedule, the cloud environment) are plugin
+  `userConfig`, asked for at install. No separate config file; revisit if
+  that proves too thin.
 - Belongs in `clients/claude/` because `review` names `AskUserQuestion`
   throughout.
 
@@ -342,8 +361,9 @@ Phases, each committed to `main` on its own and leaving things working:
    reviewed again, while a Slack-only PR I've reviewed is still skipped.
    Dispatches `/pr:review` by full name with every flag pinned, including
    `--watch=off`. Test locally, delete the old copy.
-4. **Create the routine by hand.** Run it once to answer the three
-   unverified routine questions (above), and record the results here.
-5. **Local trigger and setup.** The fire script, the launchd plist, the
-   `/fire` token in the Keychain, an idempotent setup skill with a `doctor`
-   mode, and the README checklist.
+4. **Write `automate`'s `task` and create the routine by hand.** Run it
+   once to answer the three unverified routine questions (above), and
+   record the results here.
+5. **`automate`'s `install`, `doctor`, and `off`.** The fire script, the
+   launchd plist, the `/fire` token in the Keychain, the routine itself
+   from `userConfig`, and the README checklist.
