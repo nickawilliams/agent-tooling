@@ -183,6 +183,12 @@ Run the pr:review skill on <owner>/<repo>#<n>
 with --comments=<value> --level=<value> --watch=off.
 ```
 
+When this file was read by path rather than loaded as a plugin skill, as
+in a cloud routine, `pr:review` isn't loaded as a skill either. Then use
+`review/SKILL.md` beside this file instead, here and for the single-PR
+case above, and add to each dispatch: `The pr:review skill isn't loaded;
+read <absolute path to review/SKILL.md> and follow it.`
+
 This is not optional. A subagent has nobody at the prompt, so an unflagged
 `pr:review` falls through to `--comments=none`, does the entire review, and
 posts nothing. The run would look successful and land no comments.

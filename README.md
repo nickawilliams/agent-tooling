@@ -31,7 +31,7 @@ is extracted only once a second client is in use (see DESIGN.md).
 
 | Plugin | Skills |
 |---|---|
-| `pr` | `/pr:review`, `/pr:address`, `/pr:sweep` |
+| `pr` | `/pr:review`, `/pr:address`, `/pr:sweep`, `/pr:automate` |
 
 `/pr:sweep` reads its Slack channel from the plugin's `slack_channel`
 setting (in `/config`). Leave it empty to sweep GitHub review requests only.
