@@ -2,6 +2,13 @@
 
 Instructions for AI coding agents working on this project.
 
+## Adding content
+
+`DESIGN.md` is the master plan; `README.md` describes the repo as it is.
+Give each new item the shape it actually needs now. If that departs from
+`DESIGN.md`, either move the repo toward the plan or revise the plan, and
+update its section status. Keep `README.md` matching reality.
+
 ## Commits
 
 Commits follow Conventional Commits: `type(scope): summary`. The scope is
