@@ -17,6 +17,10 @@ choosing, then record the answer in `DESIGN.md`.
 
 ## Commits
 
+Commit straight to `main` and push without asking. I'm the only consumer
+of this repo for now, so a mistake is fixed with a follow-up commit or, if
+needed, a force push.
+
 Commits follow Conventional Commits: `type(scope): summary`. The scope is
 the item or area the change touches, such as `feat(pr)` or
 `build(ci)`.
