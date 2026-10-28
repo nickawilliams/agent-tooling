@@ -133,7 +133,8 @@ the open questions on includes.
 
 ### Standalone skills
 
-*Not yet.* The first one arrives with the `pr` plugin.
+*Adopted.* Linked by `clients/claude/scripts/skills install`, checked by
+`skills doctor`.
 
 A skill that isn't part of any plugin lives at
 `clients/claude/skills/<name>/`, and its setup step symlinks it into
@@ -146,7 +147,7 @@ it; these reach only my machines.
 
 ### Root marketplace on `main`
 
-*Not yet.* Takes effect with the first plugin.
+*Adopted.*
 
 The marketplace is named `nickawilliams`, the same identifier as my npm
 scope, so install ids read `<plugin>@nickawilliams`. A generic name such as

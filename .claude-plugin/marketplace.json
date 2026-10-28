@@ -1,0 +1,14 @@
+{
+  "name": "nickawilliams",
+  "owner": {
+    "name": "nickawilliams"
+  },
+  "description": "Personal agent tooling: skills, plugins, and hooks for Claude Code",
+  "plugins": [
+    {
+      "name": "pr",
+      "source": "./clients/claude/plugins/pr",
+      "description": "Review pull requests, sweep for PRs awaiting review, and address review feedback"
+    }
+  ]
+}

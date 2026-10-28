@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+
+#?/name     skills — Link standalone skills into Claude Code config dirs
+#?/version  1.0.0
+#?/synopsis skills {install|doctor} [config_dirs...]
+#?/description
+ # Symlinks each standalone skill in clients/claude/skills/ into
+ # <config_dir>/skills/<name>. A config dir defaults to $CLAUDE_CONFIG_DIR,
+ # or ~/.claude when that is unset. Never replaces anything that isn't one
+ # of its own links, and removes its links whose skill no longer exists.
+ ##
+
+source module
+
+set -euo pipefail
+
+SKILLS_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/../skills" && pwd -P)"
+readonly SKILLS_SRC
+
+#@/private
+ # Log an error message to STDERR.
+ #
+ # @operand <message...>   Error message text
+ # @stderr                 Error message
+ ##
+skills::_err() {
+  echo "skills: ERROR: $*" >&2
+}
+
+#@/private
+ # Print the config dirs to act on.
+ #
+ # @operand [config_dirs...]  Explicit config dirs
+ # @env     CLAUDE_CONFIG_DIR Default config dir when no operands are given
+ # @stdout                    One config dir per line
+ ##
+skills::_targets() {
+  if (( $# > 0 )); then
+    printf '%s\n' "$@"
+  else
+    printf '%s\n' "${CLAUDE_CONFIG_DIR:-${HOME}/.claude}"
+  fi
+}
+
+#@/private
+ # Check, and optionally fix, the links in one config dir.
+ #
+ # @operand <mode>         `install` to fix, `doctor` to only report
+ # @operand <config_dir>   Config dir whose skills/ to check
+ #
+ # @stdout                 One status line per skill
+ # @stderr                 Conflicts that need manual attention
+ #
+ # @exit    0              Every skill is linked
+ # @exit    1              Something is missing or in the way
+ ##
+skills::_sync() {
+  local mode="$1"
+  local dest_root="$2/skills"
+  local src dest name link
+  local problems=0
+
+  [[ "${mode}" == "install" ]] && mkdir -p "${dest_root}"
+
+  for src in "${SKILLS_SRC}"/*/; do
+    src="${src%/}"
+    [[ -f "${src}/SKILL.md" ]] || continue
+    name="$(basename "${src}")"
+    dest="${dest_root}/${name}"
+
+    if [[ -L "${dest}" && "$(readlink "${dest}")" == "${src}" ]]; then
+      echo "ok       ${dest}"
+    elif [[ -e "${dest}" || -L "${dest}" ]]; then
+      skills::_err "${dest} exists and isn't this repo's link; move it first"
+      (( problems++ )) || true
+    elif [[ "${mode}" == "install" ]]; then
+      ln -s "${src}" "${dest}"
+      echo "linked   ${dest}"
+    else
+      echo "missing  ${dest}"
+      (( problems++ )) || true
+    fi
+  done
+
+  # Links into this repo whose skill was removed or renamed.
+  for link in "${dest_root}"/*; do
+    [[ -L "${link}" ]] || continue
+    [[ "$(readlink "${link}")" == "${SKILLS_SRC}/"* ]] || continue
+    [[ -e "${link}" ]] && continue
+    if [[ "${mode}" == "install" ]]; then
+      rm "${link}"
+      echo "removed  ${link}"
+    else
+      echo "stale    ${link}"
+      (( problems++ )) || true
+    fi
+  done
+
+  (( problems == 0 ))
+}
+
+#@/private
+ # Run a sync mode across every target config dir.
+ #
+ # @operand <mode>              `install` or `doctor`
+ # @operand [config_dirs...]    Config dirs; see skills::_targets
+ #
+ # @exit    0                   Every config dir is healthy
+ # @exit    1                   At least one config dir has problems
+ ##
+skills::_run() {
+  local mode="$1"
+  shift
+  local dir
+  local failed=0
+
+  while IFS= read -r dir; do
+    skills::_sync "${mode}" "${dir}" || failed=1
+  done < <(skills::_targets "$@")
+
+  return "${failed}"
+}
+
+#@/command/install
+ # Link every standalone skill, fixing what can be fixed safely.
+ #
+ # @operand [config_dirs...]  Config dirs (default: $CLAUDE_CONFIG_DIR or
+ #                            ~/.claude)
+ #
+ # @stdout                    One status line per skill
+ # @stderr                    Conflicts that need manual attention
+ #
+ # @exit    0                 Every skill is linked
+ # @exit    1                 A conflict was left in place
+ ##
+skills::install() {
+  skills::_run install "$@"
+}
+
+#@/command/doctor
+ # Report whether every standalone skill is linked, changing nothing.
+ #
+ # @operand [config_dirs...]  Config dirs (default: $CLAUDE_CONFIG_DIR or
+ #                            ~/.claude)
+ #
+ # @stdout                    One status line per skill
+ # @stderr                    Conflicts that need manual attention
+ #
+ # @exit    0                 Healthy
+ # @exit    1                 Missing, stale, or conflicting links
+ ##
+skills::doctor() {
+  skills::_run doctor "$@"
+}
+
+#@/command
+ # Link standalone skills into Claude Code config dirs.
+ #
+ # @stderr                 Usage message
+ #
+ # @exit    1              Prints usage and exits
+ ##
+skills() {
+  skills::_err "Usage: skills {install|doctor} [config_dirs...]"
+  return 1
+}
