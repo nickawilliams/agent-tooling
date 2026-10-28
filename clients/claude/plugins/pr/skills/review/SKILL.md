@@ -810,6 +810,20 @@ carries the summary, observations, unverified items, and suppressed-nit count.
 When every finding has a valid anchor, omit the body entirely — do not
 substitute a placeholder or summary sentence.
 
+The one exception: when there is nothing to stage at all (no comment at or
+above `--level` and no unanchored finding), still create the pending
+review, with a short body so GitHub accepts it:
+
+```
+**Recommended: <Approve | Comment>.** <One-sentence summary.>
+<If findings fell below --level: "<k> minor or nit notes not posted.">
+```
+
+A pending review is the record that this commit was reviewed. Without one,
+`pr:sweep` sees a requested PR with no review of yours and reviews it again
+on every run. Under `--comments=submit`, the same body is what gets
+published with the event.
+
 ### Stage: a pending review already exists
 
 Add to it rather than replacing it. It may hold comments the user wrote by
