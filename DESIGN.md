@@ -319,7 +319,7 @@ refactor, not a plain move.
 
 Phases, each committed to `main` on its own and leaving things working:
 
-1. **Move `review`.** Root `marketplace.json`, `clients/claude/plugins/pr/`
+1. **Move `review`.** *Done 2026-10-28.* Root `marketplace.json`, `clients/claude/plugins/pr/`
    with `plugin.json`, `review` copied with minimal edits, the `/review`
    forwarder and its symlink setup. Validate, install `pr@nickawilliams`
    from the local checkout, compare a real review against the old skill,
