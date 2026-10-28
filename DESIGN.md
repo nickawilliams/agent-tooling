@@ -324,13 +324,17 @@ Phases, each committed to `main` on its own and leaving things working:
    minimal edits, the `/review` forwarder and its symlink setup. Validate,
    install `pr@nickawilliams` from the local checkout, compare a real
    review against the old skill, then delete the Clearstory copy.
-2. **Generalize `coderabbit` into `address`.** Every reviewer's unresolved
+2. **Generalize `coderabbit` into `address`.** *Done 2026-10-28, shipped
+   without a dedicated test; the old skill is parked in the Clearstory
+   config dir's `retired-skills/`.* Every reviewer's unresolved
    inline threads (narrowed by `--from`), judged on the whole
    conversation. Every fixed or skipped thread gets a reply, and
    `--resolve=on|off` (default `on`) decides whether it is then resolved.
    Commits follow the repo's own conventions rather than a hardcoded Jira
    scope. Test on a PR, then delete the old copy.
-3. **Rework `review-slack` into `sweep`.** Planned in plan mode. Adds
+3. **Rework `review-slack` into `sweep`.** *Done 2026-10-28, shipped
+   without a dedicated test; the old skill is parked beside `coderabbit`.*
+   Planned in plan mode. Adds
    GitHub review requests (`gh search prs --review-requested=@me`) beside
    Slack, picked with a positional `slack|github`. The channel moves to the
    plugin's `slack_channel` setting; with none, Slack is skipped. Skips
