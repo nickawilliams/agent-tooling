@@ -52,13 +52,16 @@ arguments in the prompt text. A cloud routine doesn't load plugins, so:
 ### 1. Check prerequisites
 
 ```bash
-gh auth status
 gh api user --jq .login
 ```
 
-If either fails, stop. Report that `gh` is missing or unauthenticated in
+If it fails, stop. Report that `gh` is missing or can't reach GitHub in
 this environment, with the error, and do nothing else. Every review step
 depends on it.
+
+Don't use `gh auth status`. In a cloud routine, `GH_TOKEN` holds a
+placeholder and a proxy attaches the real credentials to each request, so
+`gh auth status` reports an invalid token while API calls succeed.
 
 ### 2. Read the fire payload
 
