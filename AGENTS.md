@@ -5,14 +5,20 @@ Instructions for AI coding agents working on this project.
 ## Adding content
 
 `DESIGN.md` is the master plan; `README.md` describes the repo as it is.
+Read `DESIGN.md` before adding or restructuring anything.
+
 Give each new item the shape it actually needs now. If that departs from
 `DESIGN.md`, either move the repo toward the plan or revise the plan, and
 update its section status. Keep `README.md` matching reality.
 
+Items marked *Open* in `DESIGN.md` are the user's decisions. When an
+addition forces one (the marketplace name, for example), ask rather than
+choosing, then record the answer in `DESIGN.md`.
+
 ## Commits
 
 Commits follow Conventional Commits: `type(scope): summary`. The scope is
-the item or area the change touches, such as `feat(voice-mode)` or
+the item or area the change touches, such as `feat(pr-autoreview)` or
 `build(ci)`.
 
 Start the summary in lowercase and don't end it with a period:

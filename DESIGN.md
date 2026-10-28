@@ -75,6 +75,12 @@ So the guard against lock-in is a writing habit, not a directory rule: keep
 glue out of `SKILL.md` content where that's easy. Where it isn't easy, keep
 the glue and move on.
 
+Anything that runs off this machine must not assume local-only tools. That
+covers hook scripts shipped in a plugin and anything a cloud routine runs.
+In particular, such scripts don't use `module-sh`, even though the shell
+style guide in my global `CLAUDE.md` otherwise calls for it. They depend
+only on what the target environment is known to provide.
+
 ## Layout
 
 ### Client-first
