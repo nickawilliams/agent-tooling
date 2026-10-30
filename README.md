@@ -32,9 +32,15 @@ is extracted only once a second client is in use (see DESIGN.md).
 | Plugin | Skills |
 |---|---|
 | `pr` | `/pr:review`, `/pr:address`, `/pr:sweep`, `/pr:automate` |
+| `relay` | `/dispatch`, `/pickup` |
 
 `/pr:sweep` reads its Slack channel from the plugin's `slack_channel`
 setting (in `/config`). Leave it empty to sweep GitHub review requests only.
+
+`relay` ships a `SessionStart` hook that announces work dispatched to a repo
+and still waiting there. Its oh-my-posh status-line count is separate glue
+at `~/.config/oh-my-posh/claude-statusline.sh`, pointed at the script in
+this checkout.
 
 ## Install
 
@@ -53,6 +59,7 @@ or whatever `CLAUDE_CONFIG_DIR` points at).
 
    ```bash
    claude plugin install pr@nickawilliams
+   claude plugin install relay@nickawilliams
    ```
 
 3. Link the standalone skills, and check them later with `doctor`:

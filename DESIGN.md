@@ -374,3 +374,34 @@ Phases, each committed to `main` on its own and leaving things working:
 5. **`automate`'s `install`, `doctor`, and `off`.** The fire script, the
    launchd plist, the `/fire` token read from 1Password with `op read`,
    the routine itself from `userConfig`, and the README checklist.
+
+### `relay` plugin
+
+*Done 2026-10-29.* The `dispatch`/`pickup` pair, ported from
+`~/Dropbox/Projects/Clearstory/.claude/skills/` and `~/.claude/skills/`
+(identical copies in both). A straight move into one plugin, named `relay`
+for the baton-pass metaphor rather than after either skill, so neither half
+is subordinated and both still answer to the bare `/dispatch` and `/pickup`
+(no built-in collisions).
+
+| From | To | Change |
+|---|---|---|
+| `dispatch` | `/relay:dispatch` | Moved as is; no glue paths in the skill |
+| `pickup` | `/relay:pickup` | Script path and packaging note repointed at `${CLAUDE_PLUGIN_ROOT}` |
+
+- The `dispatches` script stays inside `skills/pickup/`, so the skill and the
+  code its hook runs move together. It keeps its deliberate portability: no
+  `module-sh`, bash 3.2 compatible, no `$PATH` dependencies, because it runs
+  at every session start under a possibly restricted `PATH`.
+- The `SessionStart` hook ships in the plugin's `hooks/hooks.json`
+  (`matcher: startup|resume`), running the script via `${CLAUDE_PLUGIN_ROOT}`.
+  This replaces the hand-wired entry in `~/.claude/settings.json`, which is
+  removed as part of the move.
+- The oh-my-posh status-line count stays external glue at
+  `~/.config/oh-my-posh/claude-statusline.sh`, deliberately not in the
+  plugin. It can't read `${CLAUDE_PLUGIN_ROOT}` (unset at render time), so it
+  points at the script in the local checkout. This is the one place the
+  plugin's install path leaks out; acceptable because the wrapper is
+  machine-specific glue that already lives outside the repo.
+- No `userConfig`: the queue lives in each repo's `.claude/dispatches/`, with
+  no per-user values to set.

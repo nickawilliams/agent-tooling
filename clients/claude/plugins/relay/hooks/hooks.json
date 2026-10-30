@@ -1,0 +1,17 @@
+{
+  "description": "At session start, announces any work dispatched to this repo that is still waiting to be picked up. Silent when the queue is empty.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/skills/pickup/dispatches\" hook",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

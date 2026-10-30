@@ -1,0 +1,8 @@
+{
+  "name": "relay",
+  "description": "Dispatch work to a future session in another repo or this one, and pick it up there later",
+  "author": {
+    "name": "nickawilliams"
+  },
+  "repository": "https://github.com/nickawilliams/agent-tooling"
+}

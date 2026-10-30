@@ -9,6 +9,11 @@
       "name": "pr",
       "source": "./clients/claude/plugins/pr",
       "description": "Review pull requests, sweep for PRs awaiting review, and address review feedback"
+    },
+    {
+      "name": "relay",
+      "source": "./clients/claude/plugins/relay",
+      "description": "Dispatch work to a future session in another repo or this one, and pick it up there later"
     }
   ]
 }

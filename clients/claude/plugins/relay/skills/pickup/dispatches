@@ -1,0 +1,318 @@
+#!/usr/bin/env bash
+
+#?/name     dispatches — List work dispatched to a repo for a later session
+#?/version  1.0.0
+#?/synopsis dispatches [count|hook]
+#?/description
+ # Reads the pending dispatch queue written by the `dispatch` skill and
+ # renders it. The default mode prints a human-readable list, costing no
+ # model round trip when run directly. The `hook` mode emits SessionStart
+ # hook JSON instead.
+ #
+ # Ships inside the `relay` plugin's `pickup` skill, not on $PATH, so the
+ # skill and the code its SessionStart hook runs move together; the hook in
+ # the plugin's hooks/hooks.json runs it as
+ # ${CLAUDE_PLUGIN_ROOT}/skills/pickup/dispatches. House shell conventions
+ # (module-sh) are deliberately not applied: this runs at every session
+ # start and must not depend on anything resolved from $PATH. For the same
+ # reason it stays bash 3.2 compatible, since a restricted PATH resolves
+ # `env bash` to macOS's /bin/bash.
+ ##
+
+set -euo pipefail
+
+readonly DISPATCH_SUBDIR=".claude/dispatches"
+readonly STALE_DAYS=7
+
+#@/private
+ # Read a single frontmatter field from a dispatch file.
+ #
+ # Stops at the closing delimiter so body text can't shadow a field.
+ #
+ # @operand <file>         Dispatch file path
+ # @operand <key>          Frontmatter key
+ #
+ # @stdout                 Field value, unquoted; empty if absent
+ ##
+dispatches::_field() {
+  local file="${1}" key="${2}"
+  local line value delimiters=0
+
+  while IFS= read -r line; do
+    if [[ "${line}" == "---" ]]; then
+      (( ++delimiters >= 2 )) && break
+      continue
+    fi
+    if [[ "${line}" == "${key}:"* ]]; then
+      value="${line#*:}"
+      value="${value# }"
+      value="${value%\"}"
+      printf '%s\n' "${value#\"}"
+      return 0
+    fi
+  done < "${file}"
+}
+
+#@/private
+ # Age of a file in whole days.
+ #
+ # Uses mtime rather than the `at` frontmatter field to avoid parsing
+ # ISO 8601 offsets, which BSD date handles poorly.
+ #
+ # @operand <file>         Dispatch file path
+ #
+ # @stdout                 Whole days since modification, or -1 if unknown
+ ##
+dispatches::_age_days() {
+  local file="${1}" mtime
+
+  mtime="$(stat -f %m "${file}" 2> /dev/null \
+    || stat -c %Y "${file}" 2> /dev/null || echo 0)"
+  if [[ "${mtime}" == "0" ]]; then
+    echo -1
+    return 0
+  fi
+
+  echo $(( ( $(date +%s) - mtime ) / 86400 ))
+}
+
+#@/private
+ # Render a file's modification time as a human-readable age.
+ #
+ # @operand <file>         Dispatch file path
+ #
+ # @stdout                 Age phrase, e.g. "2 days ago"
+ ##
+dispatches::_age() {
+  local file="${1}"
+  local mtime now seconds days hours
+
+  mtime="$(stat -f %m "${file}" 2> /dev/null \
+    || stat -c %Y "${file}" 2> /dev/null || echo 0)"
+  [[ "${mtime}" == "0" ]] && { echo "age unknown"; return 0; }
+
+  now="$(date +%s)"
+  seconds=$(( now - mtime ))
+  days=$(( seconds / 86400 ))
+  hours=$(( seconds / 3600 ))
+
+  if (( days >= 2 )); then
+    echo "${days} days ago"
+  elif (( days == 1 )); then
+    echo "yesterday"
+  elif (( hours >= 1 )); then
+    echo "${hours}h ago"
+  else
+    echo "just now"
+  fi
+}
+
+#@/private
+ # Describe where a dispatch came from, relative to the reading repo.
+ #
+ # @operand <file>         Dispatch file path
+ # @operand <root>         Project root being read
+ #
+ # @stdout                 "queued here" or "from <path>"
+ ##
+dispatches::_origin() {
+  local file="${1}" root="${2}" from
+
+  from="$(dispatches::_field "${file}" from || true)"
+  if [[ "${from}" == "${root}" ]]; then
+    echo "queued here"
+  else
+    echo "from ${from:-unknown}"
+  fi
+}
+
+#@/private
+ # List dispatch files, newest first.
+ #
+ # @operand <dir>          Dispatch directory
+ #
+ # @stdout                 One file path per line
+ ##
+dispatches::_list() {
+  local dir="${1}" file mtime
+
+  for file in "${dir}"/*.md; do
+    [[ -f "${file}" ]] || continue
+    mtime="$(stat -f %m "${file}" 2> /dev/null \
+      || stat -c %Y "${file}" 2> /dev/null || echo 0)"
+    printf '%s\t%s\n' "${mtime}" "${file}"
+  done | sort -rn | cut -f2-
+}
+
+#@/private
+ # List dispatch files, newest first, or nothing if the queue is empty.
+ #
+ # Deliberately prints rather than populating an array by nameref: this
+ # script must run under bash 3.2, which `/bin/bash` still is on macOS and
+ # which a hook with a restricted PATH will resolve to.
+ #
+ # @operand <dir>          Dispatch directory
+ #
+ # @stdout                 One file path per line
+ ##
+dispatches::_collect() {
+  local dir="${1}"
+
+  [[ -d "${dir}" ]] || return 0
+  dispatches::_list "${dir}"
+}
+
+#@/private
+ # Escape a string for embedding in a JSON string literal.
+ #
+ # @operand <text>         Raw text
+ #
+ # @stdout                 Escaped text, safe between double quotes
+ ##
+dispatches::_json_escape() {
+  local s="${1}"
+
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\t'/\\t}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/}"
+  printf '%s' "${s}"
+}
+
+#@/subcommand count
+ # Print the number of pending dispatches, or nothing when there are none.
+ #
+ # Deliberately the cheapest path in this script: it counts filenames and
+ # never stats a file or parses frontmatter. The status line re-renders
+ # constantly, so this runs far more often than every other mode combined.
+ #
+ # Prints nothing rather than "0" so the status-line segment consuming it
+ # hides itself when the queue is empty.
+ #
+ # @env     CLAUDE_PROJECT_DIR  Project root; falls back to $PWD
+ #
+ # @stdout                 Pending count, or nothing
+ #
+ # @exit    0              Always
+ ##
+dispatches::count() {
+  local dir="${CLAUDE_PROJECT_DIR:-${PWD}}/${DISPATCH_SUBDIR}"
+  local -a files=()
+  local file
+
+  [[ -d "${dir}" ]] || return 0
+
+  for file in "${dir}"/*.md; do
+    [[ -f "${file}" ]] && files+=("${file}")
+  done
+
+  (( ${#files[@]} > 0 )) && printf '%d\n' "${#files[@]}"
+  return 0
+}
+
+#@/subcommand hook
+ # Emit pending dispatches as SessionStart hook JSON.
+ #
+ # Silent when nothing is pending, which is the overwhelming majority of
+ # sessions. Emits both halves of the contract because they do different
+ # jobs: `systemMessage` is displayed to the user immediately, while
+ # `additionalContext` only reaches the model and so surfaces nothing until
+ # the user happens to send a message.
+ #
+ # @env     CLAUDE_PROJECT_DIR  Project root; falls back to $PWD
+ #
+ # @stdout                 Hook JSON, or nothing
+ #
+ # @exit    0              Always, so a failure here never blocks a session
+ ##
+dispatches::hook() {
+  local root="${CLAUDE_PROJECT_DIR:-${PWD}}"
+  local -a files=()
+  local file summary notice context index=0
+
+  while IFS= read -r file; do
+    [[ -n "${file}" ]] && files+=("${file}")
+  done < <(dispatches::_collect "${root}/${DISPATCH_SUBDIR}")
+
+  (( ${#files[@]} > 0 )) || return 0
+
+  context="Dispatched work is pending in this repo. The user has already"
+  context+=" been shown a one-line notice, so don't repeat it and don't"
+  context+=" read these files unprompted. If they ask for one, use the"
+  context+=" pickup skill."$'\n\n'
+
+  for file in "${files[@]}"; do
+    summary="$(dispatches::_field "${file}" summary || true)"
+    (( ++index ))
+
+    context+="  ${index}. \"${summary:-untitled}\""$'\n'
+    context+="     $(dispatches::_origin "${file}" "${root}"),"
+    context+=" $(dispatches::_age "${file}")"$'\n'
+    context+="     ${file#"${root}"/}"$'\n'
+  done
+
+  summary="$(dispatches::_field "${files[0]}" summary || true)"
+  if (( ${#files[@]} == 1 )); then
+    notice="1 dispatch pending: \"${summary:-untitled}\""
+    notice+=" ($(dispatches::_origin "${files[0]}" "${root}"),"
+    notice+=" $(dispatches::_age "${files[0]}")). Ask to pick it up."
+  else
+    notice="${#files[@]} dispatches pending here, newest"
+    notice+=" \"${summary:-untitled}\". Ask to see them."
+  fi
+
+  printf '{"systemMessage":"%s","hookSpecificOutput":{"hookEventName":' \
+    "$(dispatches::_json_escape "${notice}")"
+  printf '"SessionStart","additionalContext":"%s"}}\n' \
+    "$(dispatches::_json_escape "${context}")"
+}
+
+#@/command
+ # Print the pending dispatch queue for the current repo.
+ #
+ # Unlike `hook` mode, this says so when nothing is pending: it was asked a
+ # question and silence would read as failure.
+ #
+ # @env     CLAUDE_PROJECT_DIR  Project root; falls back to $PWD
+ #
+ # @stdout                 Human-readable list, or a "nothing pending" line
+ #
+ # @exit    0              Always
+ ##
+dispatches() {
+  local root="${CLAUDE_PROJECT_DIR:-${PWD}}"
+  local -a files=()
+  local file summary days stale index=0
+
+  while IFS= read -r file; do
+    [[ -n "${file}" ]] && files+=("${file}")
+  done < <(dispatches::_collect "${root}/${DISPATCH_SUBDIR}")
+
+  if (( ${#files[@]} == 0 )); then
+    printf 'No dispatches pending in %s\n' "${root}"
+    return 0
+  fi
+
+  printf '%d pending in %s\n\n' "${#files[@]}" "${root}"
+
+  for file in "${files[@]}"; do
+    summary="$(dispatches::_field "${file}" summary || true)"
+    days="$(dispatches::_age_days "${file}")"
+    stale=""
+    (( days >= STALE_DAYS )) && stale=" · stale"
+    (( ++index ))
+
+    printf '  %d. %s\n' "${index}" "${summary:-untitled}"
+    printf '     %s · %s%s\n' \
+      "$(dispatches::_origin "${file}" "${root}")" \
+      "$(dispatches::_age "${file}")" "${stale}"
+    printf '     %s\n\n' "${file#"${root}"/}"
+  done
+}
+
+case "${1:-}" in
+  count) dispatches::count || true ;;
+  hook)  dispatches::hook  || true ;;
+  *)     dispatches        || true ;;
+esac
