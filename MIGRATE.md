@@ -14,7 +14,7 @@ Authored customizations to pull from `~/.claude` and the Clearstory
 - [ ] `start-work`
 - [ ] `git-stash-cleanup`
 - [x] `recall` (standalone skill)
-- [ ] `restate`
+- [x] `restate` (standalone skill)
 - [ ] `fix-console-errors`
 - [ ] `tab-triage`
 - [ ] `mail-send-guard.sh` hook
