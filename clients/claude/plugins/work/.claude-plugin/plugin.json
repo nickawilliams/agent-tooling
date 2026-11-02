@@ -1,6 +1,6 @@
 {
   "name": "work",
-  "description": "Daily and weekly work rituals: standup notes and the 15Five check-in, drafted from Jira, GitHub, Slack, Calendar, meeting notes, and Claude Code sessions",
+  "description": "Work-tracker workflows: standup notes and the 15Five check-in drafted from Jira, GitHub, Slack, Calendar, meeting notes, and Claude Code sessions, and make-it-so, which takes a Jira issue to a merge-ready PR through foreman",
   "author": {
     "name": "nickawilliams"
   },

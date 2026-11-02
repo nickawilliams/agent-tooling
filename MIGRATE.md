@@ -7,8 +7,8 @@ Authored customizations to pull from `~/.claude` and the Clearstory
 - [x] `relay` plugin (`dispatch`, `pickup`)
 - [x] `review` forwarder skill
 - [x] `eli5` output style
-- [x] `work` plugin (`standup`, `15five`)
-- [ ] `make-it-so` (diverged: home is GitHub-generic, Clearstory is Jira/foreman)
+- [x] `work` plugin (`standup`, `15five`, `make-it-so` from Clearstory)
+- [ ] `make-it-so` (home, GitHub-generic; reconcile with `work:make-it-so`)
 - [ ] `in-my-ready-room`
 - [ ] `state-the-nature`
 - [ ] `start-work`
