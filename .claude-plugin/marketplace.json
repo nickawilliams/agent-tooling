@@ -14,6 +14,11 @@
       "name": "relay",
       "source": "./clients/claude/plugins/relay",
       "description": "Dispatch work to a future session in another repo or this one, and pick it up there later"
+    },
+    {
+      "name": "work",
+      "source": "./clients/claude/plugins/work",
+      "description": "Daily work rituals, starting with standup notes built from Jira, GitHub, Slack, Calendar, meeting notes, and Claude Code sessions"
     }
   ]
 }

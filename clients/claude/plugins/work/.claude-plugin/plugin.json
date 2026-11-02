@@ -1,0 +1,50 @@
+{
+  "name": "work",
+  "description": "Daily work rituals, starting with standup notes built from Jira, GitHub, Slack, Calendar, meeting notes, and Claude Code sessions",
+  "author": {
+    "name": "nickawilliams"
+  },
+  "repository": "https://github.com/nickawilliams/agent-tooling",
+  "userConfig": {
+    "work_email": {
+      "type": "string",
+      "title": "Work email",
+      "description": "Your work email, used as the git author filter, e.g. you@example.com."
+    },
+    "slack_user_id": {
+      "type": "string",
+      "title": "Slack user ID",
+      "description": "Your Slack member ID, e.g. U0123456789, for finding your own messages and mentions of you."
+    },
+    "jira_site": {
+      "type": "string",
+      "title": "Jira site",
+      "description": "Your Atlassian site host, e.g. example.atlassian.net. Issue links point at it."
+    },
+    "standup_channel": {
+      "type": "string",
+      "title": "Standup channel",
+      "description": "Slack channel where async standup updates are posted, e.g. team-standup. Its past posts set the voice."
+    },
+    "standup_event": {
+      "type": "string",
+      "title": "Standup meeting",
+      "description": "Calendar title of the standup meeting, e.g. Team Stand Up. Its start time is the evidence cutoff."
+    },
+    "async_standup_event": {
+      "type": "string",
+      "title": "Async standup reminder",
+      "description": "Calendar title of the reminder on days the update is posted to Slack instead of a meeting, e.g. Post Standup Update in Slack. Leave empty if every standup is a meeting."
+    },
+    "repo_globs": {
+      "type": "string",
+      "title": "Repository globs",
+      "description": "Space-separated globs matching your local work repos and worktrees, e.g. ~/src/acme/*/ ~/src/acme/worktrees/*/*/"
+    },
+    "session_cwd_regex": {
+      "type": "string",
+      "title": "Session directory regex",
+      "description": "Anchored regex matching the working directories of Claude Code sessions that count as work, e.g. ^/Users/me/src/acme"
+    }
+  }
+}

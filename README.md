@@ -33,9 +33,16 @@ is extracted only once a second client is in use (see DESIGN.md).
 |---|---|
 | `pr` | `/pr:review`, `/pr:address`, `/pr:sweep`, `/pr:automate` |
 | `relay` | `/dispatch`, `/pickup` |
+| `work` | `/standup` |
 
 `/pr:sweep` reads its Slack channel from the plugin's `slack_channel`
 setting (in `/config`). Leave it empty to sweep GitHub review requests only.
+
+`work` asks for its settings at install (work email, Slack user ID, Jira
+site, standup channel and calendar events, repo globs, and a session
+directory regex). Change them later in `/config` or with
+`claude plugin configure work`. `/standup` also uses a Graphiti memory
+server when one is configured.
 
 `relay` ships a `SessionStart` hook that announces work dispatched to a repo
 and still waiting there. Its oh-my-posh status-line count is separate glue
@@ -60,6 +67,7 @@ or whatever `CLAUDE_CONFIG_DIR` points at).
    ```bash
    claude plugin install pr@nickawilliams
    claude plugin install relay@nickawilliams
+   claude plugin install work@nickawilliams
    ```
 
 3. Link the standalone skills, and check them later with `doctor`:
