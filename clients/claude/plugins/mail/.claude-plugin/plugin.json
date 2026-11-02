@@ -1,0 +1,8 @@
+{
+  "name": "mail",
+  "description": "Guards outbound mail: a PreToolUse hook that asks before every Mail MCP send, even in bypassPermissions mode, and denies sends that hand-build threading headers",
+  "author": {
+    "name": "nickawilliams"
+  },
+  "repository": "https://github.com/nickawilliams/agent-tooling"
+}

@@ -35,6 +35,7 @@ is extracted only once a second client is in use (see DESIGN.md).
 | `pr` | `/pr:review`, `/pr:address`, `/pr:sweep`, `/pr:automate` |
 | `relay` | `/dispatch`, `/pickup` |
 | `work` | `/standup`, `/15five`, `/state-the-nature`, `/ready-room`, `/make-it-so` |
+| `mail` | none; a `PreToolUse` hook that gates outbound mail |
 
 `/pr:sweep` reads its Slack channel from the plugin's `slack_channel`
 setting (in `/config`). Leave it empty to sweep GitHub review requests only.
@@ -45,6 +46,11 @@ directory regex, and the foreman project root). Change them later in
 `/config` or with `claude plugin configure work`. `/standup` also uses a
 Graphiti memory server when one is configured. `/make-it-so` drives the
 `foreman` CLI, which must be on `PATH`.
+
+`mail` ships only a `PreToolUse` hook on the Mail MCP server's send tools.
+It asks before every send, even in `bypassPermissions` mode, and denies an
+`smtp_send_message` call that carries hand-built threading headers, pointing
+at `smtp_reply_message` instead. The hook needs `jq`.
 
 `relay` ships a `SessionStart` hook that announces work dispatched to a repo
 and still waiting there. Its oh-my-posh status-line count is separate glue
@@ -70,6 +76,7 @@ or whatever `CLAUDE_CONFIG_DIR` points at).
    claude plugin install pr@nickawilliams
    claude plugin install relay@nickawilliams
    claude plugin install work@nickawilliams
+   claude plugin install mail@nickawilliams
    ```
 
 3. Link the standalone skills and output styles (such as `/recall` and

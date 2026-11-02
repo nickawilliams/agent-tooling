@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+
+#?/name     mail-send-guard — Gate outbound mail MCP tool calls
+#?/version  1.0.0
+#?/synopsis mail-send-guard < hook-input.json
+
+set -euo pipefail
+
+# Tool basenames that actually put mail on the wire. Matched against the
+# trailing segment of the MCP tool name so the server prefix can change
+# without silently disarming the guard.
+readonly SEND_TOOLS='smtp_send_message smtp_reply_message graph_send_message ews_send_message'
+
+#@/private
+ # Emit a PreToolUse permission decision and exit.
+ #
+ # @operand <decision>     allow, deny or ask
+ # @operand <reason>       Explanation surfaced to the model and user
+ #
+ # @stdout                 PreToolUse hookSpecificOutput JSON
+ #
+ # @exit    0              Always
+ ##
+mail_send_guard::_decide() {
+  local decision="$1"
+  local reason="$2"
+
+  jq -nc \
+    --arg decision "${decision}" \
+    --arg reason "${reason}" \
+    '{
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: $decision,
+        permissionDecisionReason: $reason
+      }
+    }'
+  exit 0
+}
+
+#@/private
+ # Test whether a tool name ends in one of the send tool basenames.
+ #
+ # @env     SEND_TOOLS     Space separated basenames
+ #
+ # @operand <tool_name>    Full MCP tool name from the hook payload
+ #
+ # @exit    0              Tool sends mail
+ # @exit    1              Tool does not send mail
+ ##
+mail_send_guard::_is_send_tool() {
+  local tool_name="$1"
+  local candidate
+
+  for candidate in ${SEND_TOOLS}; do
+    [[ "${tool_name}" == *"${candidate}" ]] && return 0
+  done
+
+  return 1
+}
+
+#@/command
+ # Gate outbound mail tool calls read from a PreToolUse hook payload.
+ #
+ # Denies smtp_send_message when it carries hand built threading headers,
+ # since those must come from the server via smtp_reply_message. Asks for
+ # confirmation on every other send, which restores a prompt that
+ # bypassPermissions mode would otherwise skip.
+ #
+ # @stdin                  PreToolUse hook payload JSON
+ #
+ # @stdout                 Permission decision JSON, or nothing to pass
+ #
+ # @exit    0              Always, so a malformed payload never blocks work
+ ##
+mail_send_guard() {
+  local payload tool_name in_reply_to references
+
+  payload="$(cat)"
+
+  tool_name="$(jq -r '.tool_name // ""' <<< "${payload}" 2>/dev/null || true)"
+  [[ -n "${tool_name}" ]] || exit 0
+
+  mail_send_guard::_is_send_tool "${tool_name}" || exit 0
+
+  if [[ "${tool_name}" == *smtp_send_message ]]; then
+    in_reply_to="$(jq -r '.tool_input.in_reply_to // ""' <<< "${payload}")"
+    references="$(jq -r '.tool_input.references // ""' <<< "${payload}")"
+
+    if [[ -n "${in_reply_to}" || -n "${references}" ]]; then
+      mail_send_guard::_decide deny \
+"smtp_send_message was called with hand built threading headers \
+(in_reply_to/references). Those values must come from the server, not from \
+memory. Use smtp_reply_message with the message_id of the message being \
+replied to, which fetches the original and builds In-Reply-To and References \
+from it."
+    fi
+  fi
+
+  mail_send_guard::_decide ask \
+"Outbound mail: confirm the recipients and body before this is sent."
+}
+
+mail_send_guard "$@"

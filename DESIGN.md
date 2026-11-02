@@ -445,3 +445,22 @@ collisions).
 - Graphiti is optional: with no server configured, the reconciliation
   baseline comes from Granola or the last Slack post and nothing is
   persisted.
+
+### `mail` plugin
+
+*Done 2026-11-02.* Home for the `mail-send-guard` hook, moved from
+`~/.claude/hooks/` together with its hand-wired `PreToolUse` entry in
+`~/.claude/settings.json`, which is removed. A hook is a plugin-only
+feature, so this is a plugin even with no skills; it's named for the
+area so mail skills can join it later.
+
+- The hook matches the Mail MCP server's send tools by basename
+  (`smtp_send_message`, `smtp_reply_message`, `graph_send_message`,
+  `ews_send_message`), so the server prefix can change without disarming
+  it. It answers `ask` on every send, restoring the prompt that
+  `bypassPermissions` mode skips, and `deny` when `smtp_send_message`
+  carries hand-built `in_reply_to` or `references` values, which must
+  come from the server via `smtp_reply_message`.
+- The script drops its `.sh` extension (executables have none here) and
+  runs via `${CLAUDE_PLUGIN_ROOT}`. Like the other shipped hook scripts
+  it skips `module-sh`; it needs only `bash` and `jq`.
