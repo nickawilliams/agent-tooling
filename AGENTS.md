@@ -17,7 +17,7 @@ choosing, then record the answer in `DESIGN.md`.
 
 ## Scripts
 
-Executable scripts have no extension (`standalone`, `dispatches`,
+Executable scripts have no extension (`install`, `dispatches`,
 `sessions`). Reserve `.sh` for sourced, non-executable libraries.
 
 ## Commits

@@ -31,7 +31,7 @@ It is meant to hold:
   `~/Projects/mcp`)
 - Subagent definitions, slash commands, and prompt templates
 - Shared instructions (`CLAUDE.md`, `AGENTS.md`) and their parts
-- Settings fragments, standalone scripts, workflows, and playbooks
+- Settings fragments, scripts, workflows, and playbooks
 - Configs for tools around the agents, such as the oh-my-posh status line
 - Cloud routines (scheduled tasks) and their local triggers
 
@@ -132,13 +132,14 @@ start repeating across clients, move them to `common/packages/`.
 Once `common/` exists, a plugin will need to pull items in from it. See
 the open questions on includes.
 
-### Standalone items
+### Linked items
 
-*Adopted.* Linked by `clients/claude/scripts/standalone install`, checked
-by `standalone doctor`.
+*Adopted.* Linked by `clients/claude/scripts/install`, checked by
+`install doctor`. Called "standalone items" until 2026-11-02; renamed for
+what happens to them rather than for what they aren't.
 
 An item that isn't part of any plugin lives at its kind's directory under
-`clients/claude/`, and the setup step symlinks it into each config dir:
+`clients/claude/`, and the install script symlinks it into each config dir:
 
 | Kind | Source | Linked as |
 |---|---|---|
@@ -149,6 +150,16 @@ An item that isn't part of any plugin lives at its kind's directory under
 
 Sources are under `clients/claude/` except the instructions, which are the
 first item in `common/` and link to the fixed file name Claude Code reads.
+
+**Opting out.** A config dir lists items it doesn't want in
+`<config_dir>/.agent-tooling-ignore`, one `kind/name` per line as linked
+(`skills/make-it-so`, `output-styles/eli5.md`). `install` skips them and
+removes their link and settings entries if present; `doctor` reports a
+lingering link as stale. The file is named for this repo because it sits
+in a directory Claude Code owns. Its first use keeps the GitHub
+`make-it-so` out of the Clearstory config dir, where the bare
+`/make-it-so` must fall through to `work:make-it-so`; a personal skill
+would otherwise win the name.
 
 **Settings fragments.** A hook has no discovery directory: Claude Code
 reads hooks from `settings.json`. So a hook item is a directory holding
@@ -163,18 +174,17 @@ it and keeps its two-space layout. The permission allowlist stays out of
 the repo: it grows with every approval, so a fragment would be a second
 copy to keep in step by hand, and bypass mode makes it inert anyway.
 
-**Plugin or standalone.** Ease of install doesn't decide it: both install
-in one step from the same single copy. Make an item part of a plugin when
-it belongs to a bundle, needs plugin-only features (`userConfig`,
+**Plugin or linked.** Ease of install doesn't decide it: both install in
+one step from the same single copy. Make an item part of a plugin when it
+belongs to a bundle, needs plugin-only features (`userConfig`,
 `${CLAUDE_PLUGIN_ROOT}`), or is meant for other people. A hook on its own
-is standalone too; a hook that belongs with a skill ships in that skill's
-plugin, as `relay`'s does. Keep it standalone
-when it is personal, stands alone, and a namespace would add nothing, or
-when it must not ship in a plugin at all, such as a personal override of a
-built-in command name (see [Command names](#command-names)). A plugin
-reaches everyone who installs it; standalone items reach only my machines.
-Promote a standalone item into a plugin once it gains siblings or needs a
-plugin feature.
+is linked too; a hook that belongs with a skill ships in that skill's
+plugin, as `relay`'s does. Keep an item linked when it is personal, stands
+alone, and a namespace would add nothing, or when it must not ship in a
+plugin at all, such as a personal override of a built-in command name (see
+[Command names](#command-names)). A plugin reaches everyone who installs
+it; linked items reach only my machines. Promote a linked item into a
+plugin once it gains siblings or needs a plugin feature.
 
 ## Distribution
 
@@ -251,7 +261,7 @@ Recheck before relying on them.
   `/review` (an alias of `/code-review`). Setting `skillOverrides` to turn
   `code-review` off doesn't free the alias, it just makes `/review` fail.
   `disableBundledSkills` frees it, but turns off every bundled skill.
-- To claim such a name, use a personal [standalone skill](#standalone-items)
+- To claim such a name, use a personal [linked skill](#linked-items)
   that forwards to the plugin skill, with `disable-model-invocation: true`
   so Claude only sees the real one. Keep it out of the plugin, so other
   people who install the plugin keep the built-in.
@@ -348,7 +358,7 @@ refactor, not a plain move.
 | `review-slack` | `/pr:sweep` | Reworked: adds GitHub review requests; channel is a plugin setting |
 | `coderabbit` | `/pr:address` | Generalized: any reviewer's inline threads, not just CodeRabbit |
 
-- A personal standalone skill at `clients/claude/skills/review/` claims
+- A personal linked skill at `clients/claude/skills/review/` claims
   `/review` and forwards to `/pr:review`. It stays outside the plugin.
 - `sweep` only finds PRs and reviews each with `/pr:review`. It has no
   single-PR mode; a routine fired for one PR invokes `/pr:review` directly.
@@ -479,10 +489,10 @@ collisions).
 
 *Done 2026-11-02.* The outbound-mail guard, moved from `~/.claude/hooks/`
 and its hand-wired `PreToolUse` entry in `~/.claude/settings.json` to the
-standalone `hooks/` kind. For about an hour the same day it shipped as a
+linked `hooks/` kind. For about an hour the same day it shipped as a
 one-hook `mail` plugin, because a plugin's `hooks.json` was the only
 one-step install that existed; the settings-fragment merge in
-`standalone install` replaced that, and the plugin was removed before
+the install script replaced that, and the plugin was removed before
 anything but this machine installed it.
 
 - The hook matches the Mail MCP server's send tools by basename
@@ -493,8 +503,8 @@ anything but this machine installed it.
   carries hand-built `in_reply_to` or `references` values, which must
   come from the server via `smtp_reply_message`.
 - The script has no `.sh` extension (executables have none here) and
-  needs only `bash` and `jq`. `standalone` itself now needs `jq` too, for
-  the merge.
+  needs only `bash` and `jq`. The install script itself now needs `jq`
+  too, for the merge.
 
 ### VS Code wrapper
 
@@ -521,7 +531,7 @@ been silently inert.
 *Done 2026-11-02.* `common/instructions/AGENTS.md` is the global
 instruction file, moved from `~/Dropbox/.system/…/.ai/AGENTS.md`, where
 Dropbox synced it but nothing versioned it; the dotfiles repo never
-tracked that directory. `standalone install` links it as each config
+tracked that directory. The install script links it as each config
 dir's `CLAUDE.md`, which also closed a gap: the Clearstory config dir had
 an empty `CLAUDE.md`, so sessions there ran without the house rules.
 
@@ -536,6 +546,6 @@ an empty `CLAUDE.md`, so sessions there ran without the house rules.
   Dropbox, so the working tree propagates the same way the old copy did,
   with git for history.
 - The dotfiles installer (`.system/macos/install.sh`, step Agent Tooling)
-  runs `standalone install` against `~/.claude` and, when `claude` is
+  runs `clients/claude/scripts/install` against `~/.claude` and, when `claude` is
   present, adds the marketplace and installs the plugins. That is the
   rebuild path; the README steps are the same commands by hand.

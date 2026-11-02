@@ -18,11 +18,11 @@ agent-tooling/
 │   └── instructions/       # client-neutral AGENTS.md, linked as each config dir's CLAUDE.md
 ├── clients/
 │   └── claude/             # everything for Claude Code
-│       ├── hooks/          #   standalone hooks, linked into a config dir and merged into its settings
-│       ├── output-styles/  #   standalone output styles, symlinked into a config dir
+│       ├── hooks/          #   linked hooks, each with a settings fragment merged into the config dir
+│       ├── output-styles/  #   linked output styles
 │       ├── plugins/        #   plugins, installed from the marketplace
-│       ├── scripts/        #   setup scripts and the VS Code process wrapper
-│       └── skills/         #   standalone skills, symlinked into a config dir
+│       ├── scripts/        #   the install script and the VS Code process wrapper
+│       └── skills/         #   linked skills
 ├── AGENTS.md               # guidelines for agents working in this repo
 ├── DESIGN.md               # master plan
 └── README.md
@@ -51,7 +51,7 @@ directory regex, and the foreman project root). Change them later in
 Graphiti memory server when one is configured. `/make-it-so` drives the
 `foreman` CLI, which must be on `PATH`.
 
-The standalone `mail-send-guard` hook gates the Mail MCP server's send
+The linked `mail-send-guard` hook gates the Mail MCP server's send
 tools: it asks before every send, even in `bypassPermissions` mode, and
 denies an `smtp_send_message` call that carries hand-built threading
 headers, pointing at `smtp_reply_message` instead.
@@ -86,14 +86,17 @@ or whatever `CLAUDE_CONFIG_DIR` points at).
    ```
 
 3. Link the global instructions (as the config dir's `CLAUDE.md`) and the
-   standalone skills, hooks, and output styles (such as `/recall`, the
+   linked skills, hooks, and output styles (such as `/recall`, the
    outbound-mail guard, and `ELI5`), merging each hook's settings fragment
-   into the config dir's `settings.json`, and check them later with
-   `doctor`. Pass every config dir you use. The script needs `jq`:
+   into the config dir's `settings.json`. Pass every config dir you use,
+   and check them later with `install doctor`. The script needs `jq`:
 
    ```bash
-   clients/claude/scripts/standalone install [config_dir...]
+   clients/claude/scripts/install [config_dir...]
    ```
+
+   A config dir opts out of an item with a `.agent-tooling-ignore` file,
+   one `kind/name` per line, such as `skills/make-it-so`.
 
 4. If a project's `.envrc` sets `CLAUDE_CONFIG_DIR`, point the VS Code
    extension's `claudeCode.claudeProcessWrapper` setting at

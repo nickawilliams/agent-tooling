@@ -1,22 +1,30 @@
 #!/usr/bin/env bash
 
-#?/name     standalone — Link standalone items into Claude Code config dirs
-#?/version  3.1.0
-#?/synopsis standalone {install|doctor} [config_dirs...]
+#?/name     install — Link this repo's items into Claude Code config dirs
+#?/version  4.0.0
+#?/synopsis install [doctor] [config_dirs...]
 #?/description
- # Symlinks each standalone item into a config dir. From clients/claude/:
+ # Symlinks each linked item into a config dir. From clients/claude/:
  # skills/<name>/ (a directory with SKILL.md) to <config_dir>/skills/<name>,
  # output-styles/<name>.md to <config_dir>/output-styles/<name>.md, and
  # hooks/<name>/ (a directory with settings.json) to <config_dir>/hooks/<name>.
  # From common/: instructions/AGENTS.md to <config_dir>/CLAUDE.md, the fixed
  # name Claude Code reads global instructions from.
+ #
  # A hook's settings.json is a fragment holding the `hooks` entries it needs
  # in <config_dir>/settings.json, with {{config_dir}} standing for the config
  # dir; install merges them in and removes entries it owns that no hook
- # wants any more. A config dir defaults to $CLAUDE_CONFIG_DIR, or ~/.claude
- # when that is unset. Never replaces anything that isn't one of its own
- # links or entries, and removes its links whose item no longer exists.
- # Needs jq.
+ # wants any more.
+ #
+ # A config dir opts out of items with <config_dir>/.agent-tooling-ignore,
+ # one `<kind>/<name>` per line as linked (`skills/make-it-so`,
+ # `output-styles/eli5.md`); `#` lines and blank lines are skipped. An
+ # ignored item's link and settings entries are removed if present.
+ #
+ # With no subcommand, installs. `doctor` reports without changing anything.
+ # A config dir defaults to $CLAUDE_CONFIG_DIR, or ~/.claude when that is
+ # unset. Never replaces anything that isn't one of its own links or
+ # entries, and removes its links whose item no longer exists. Needs jq.
  ##
 
 source module
@@ -30,9 +38,11 @@ readonly REPO_ROOT
 
 # Item kinds. Each names its source dir under clients/claude/ and its
 # destination dir in a config dir, except instructions, which come from
-# common/ and link to a fixed file name; see standalone::_src_root and
-# standalone::_dest.
+# common/ and link to a fixed file name; see install::_src_root and
+# install::_dest.
 readonly KINDS=(instructions skills output-styles hooks)
+
+readonly IGNORE_FILE=".agent-tooling-ignore"
 
 #@/private
  # Log an error message to STDERR.
@@ -40,8 +50,8 @@ readonly KINDS=(instructions skills output-styles hooks)
  # @operand <message...>   Error message text
  # @stderr                 Error message
  ##
-standalone::_err() {
-  echo "standalone: ERROR: $*" >&2
+install::_err() {
+  echo "install: ERROR: $*" >&2
 }
 
 #@/private
@@ -55,11 +65,11 @@ standalone::_err() {
  # @exit    0              Printed
  # @exit    1              The dir doesn't exist
  ##
-standalone::_abs() {
+install::_abs() {
   local dir="$1"
 
   if [[ ! -d "${dir}" ]]; then
-    standalone::_err "config dir does not exist: ${dir}"
+    install::_err "config dir does not exist: ${dir}"
     return 1
   fi
   (cd "${dir}" && pwd -P)
@@ -72,7 +82,7 @@ standalone::_abs() {
  # @env     CLAUDE_CONFIG_DIR Default config dir when no operands are given
  # @stdout                    One config dir per line
  ##
-standalone::_targets() {
+install::_targets() {
   if (( $# > 0 )); then
     printf '%s\n' "$@"
   else
@@ -86,7 +96,7 @@ standalone::_targets() {
  # @operand <kind>         Item kind
  # @stdout                 Absolute directory
  ##
-standalone::_src_root() {
+install::_src_root() {
   case "$1" in
     instructions) echo "${REPO_ROOT}/common/instructions" ;;
     *) echo "${CLIENT_SRC}/$1" ;;
@@ -104,7 +114,7 @@ standalone::_src_root() {
  # @operand <src>          The item's source path
  # @stdout                 Absolute destination path
  ##
-standalone::_dest() {
+install::_dest() {
   local kind="$1"
   local config_dir="$2"
   local src="$3"
@@ -116,13 +126,35 @@ standalone::_dest() {
 }
 
 #@/private
+ # Test whether a config dir opts out of an item.
+ #
+ # @operand <kind>         Item kind
+ # @operand <src>          The item's source path
+ # @operand <config_dir>   Absolute config dir
+ #
+ # @reads   <config_dir>/.agent-tooling-ignore
+ #
+ # @exit    0              The item is ignored there
+ # @exit    1              It isn't
+ ##
+install::_ignored() {
+  local kind="$1"
+  local src="$2"
+  local ignore_file="$3/${IGNORE_FILE}"
+
+  [[ -f "${ignore_file}" ]] || return 1
+  grep -Fxq "${kind}/$(basename "${src}")" \
+    <(sed -e 's/[[:space:]]*#.*//' -e '/^[[:space:]]*$/d' "${ignore_file}")
+}
+
+#@/private
  # Print the source paths of one kind's items.
  #
  # @operand <kind>         `instructions`, `skills`, `output-styles`, or
  #                         `hooks`
  # @stdout                 One absolute source path per line
  ##
-standalone::_sources() {
+install::_sources() {
   local kind="$1"
   local src
 
@@ -155,24 +187,26 @@ standalone::_sources() {
  #
  # Reads each hook's settings.json fragment, replaces the literal
  # {{config_dir}} in its strings with the config dir, and flattens its
- # `hooks` object into one record per entry.
+ # `hooks` object into one record per entry. Ignored hooks contribute
+ # nothing, so their entries count as stale.
  #
  # @operand <config_dir>   Absolute config dir
  #
  # @stdout                 JSON array of {name, event, entry}
  ##
-standalone::_hook_entries() {
+install::_hook_entries() {
   local config_dir="$1"
   local src
 
   while IFS= read -r src; do
+    install::_ignored hooks "${src}" "${config_dir}" && continue
     jq -c --arg name "$(basename "${src}")" --arg dir "${config_dir}" '
       walk(if type == "string"
            then gsub("\\{\\{config_dir\\}\\}"; $dir) else . end)
       | .hooks // {} | to_entries[] | .key as $event
       | .value[] | {name: $name, event: $event, entry: .}
     ' "${src}/settings.json"
-  done < <(standalone::_sources hooks) | jq -sc '.'
+  done < <(install::_sources hooks) | jq -sc '.'
 }
 
 #@/private
@@ -194,7 +228,7 @@ standalone::_hook_entries() {
  # @exit    0              Every wanted entry is present, none is stale
  # @exit    1              Something is missing or stale
  ##
-standalone::_sync_hook_entries() {
+install::_sync_hook_entries() {
   local mode="$1"
   local config_dir="$2"
   local settings="${config_dir}/settings.json"
@@ -202,7 +236,7 @@ standalone::_sync_hook_entries() {
   local current wanted report status event name tmp
   local problems=0
 
-  wanted="$(standalone::_hook_entries "${config_dir}")"
+  wanted="$(install::_hook_entries "${config_dir}")"
   if [[ -f "${settings}" ]]; then
     current="$(cat "${settings}")"
   else
@@ -290,7 +324,7 @@ standalone::_sync_hook_entries() {
  # @exit    0              Every item is linked
  # @exit    1              Something is missing or in the way
  ##
-standalone::_sync() {
+install::_sync() {
   local mode="$1"
   local kind="$2"
   local dest_root="$3/${kind}"
@@ -301,12 +335,24 @@ standalone::_sync() {
   [[ "${mode}" == "install" ]] && mkdir -p "${dest_root}"
 
   while IFS= read -r src; do
-    dest="$(standalone::_dest "${kind}" "$3" "${src}")"
+    dest="$(install::_dest "${kind}" "$3" "${src}")"
 
-    if [[ -L "${dest}" && "$(readlink "${dest}")" == "${src}" ]]; then
+    if install::_ignored "${kind}" "${src}" "$3"; then
+      if [[ -L "${dest}" && "$(readlink "${dest}")" == "${src}" ]]; then
+        if [[ "${mode}" == "install" ]]; then
+          rm "${dest}"
+          echo "removed  ${dest} (ignored)"
+        else
+          echo "stale    ${dest} (ignored)"
+          (( problems++ )) || true
+        fi
+      else
+        echo "ignored  ${dest}"
+      fi
+    elif [[ -L "${dest}" && "$(readlink "${dest}")" == "${src}" ]]; then
       echo "ok       ${dest}"
     elif [[ -e "${dest}" || -L "${dest}" ]]; then
-      standalone::_err "${dest} exists and isn't this repo's link; move it first"
+      install::_err "${dest} exists and isn't this repo's link; move it first"
       (( problems++ )) || true
     elif [[ "${mode}" == "install" ]]; then
       ln -s "${src}" "${dest}"
@@ -315,12 +361,12 @@ standalone::_sync() {
       echo "missing  ${dest}"
       (( problems++ )) || true
     fi
-  done < <(standalone::_sources "${kind}")
+  done < <(install::_sources "${kind}")
 
   # Links into this repo whose item was removed or renamed.
   for link in "${dest_root}"/*; do
     [[ -L "${link}" ]] || continue
-    [[ "$(readlink "${link}")" == "$(standalone::_src_root "${kind}")/"* ]] \
+    [[ "$(readlink "${link}")" == "$(install::_src_root "${kind}")/"* ]] \
       || continue
     [[ -e "${link}" ]] && continue
     if [[ "${mode}" == "install" ]]; then
@@ -333,7 +379,7 @@ standalone::_sync() {
   done
 
   if [[ "${kind}" == "hooks" ]]; then
-    standalone::_sync_hook_entries "${mode}" "$3" || (( problems++ )) || true
+    install::_sync_hook_entries "${mode}" "$3" || (( problems++ )) || true
   fi
 
   (( problems == 0 ))
@@ -343,45 +389,29 @@ standalone::_sync() {
  # Run a sync mode for every kind across every target config dir.
  #
  # @operand <mode>              `install` or `doctor`
- # @operand [config_dirs...]    Config dirs; see standalone::_targets
+ # @operand [config_dirs...]    Config dirs; see install::_targets
  #
  # @exit    0                   Every config dir is healthy
  # @exit    1                   At least one config dir has problems
  ##
-standalone::_run() {
+install::_run() {
   local mode="$1"
   shift
   local dir kind
   local failed=0
 
   while IFS= read -r dir; do
-    dir="$(standalone::_abs "${dir}")" || { failed=1; continue; }
+    dir="$(install::_abs "${dir}")" || { failed=1; continue; }
     for kind in "${KINDS[@]}"; do
-      standalone::_sync "${mode}" "${kind}" "${dir}" || failed=1
+      install::_sync "${mode}" "${kind}" "${dir}" || failed=1
     done
-  done < <(standalone::_targets "$@")
+  done < <(install::_targets "$@")
 
   return "${failed}"
 }
 
-#@/command/install
- # Link every standalone item, fixing what can be fixed safely.
- #
- # @operand [config_dirs...]  Config dirs (default: $CLAUDE_CONFIG_DIR or
- #                            ~/.claude)
- #
- # @stdout                    One status line per item
- # @stderr                    Conflicts that need manual attention
- #
- # @exit    0                 Every item is linked
- # @exit    1                 A conflict was left in place
- ##
-standalone::install() {
-  standalone::_run install "$@"
-}
-
 #@/command/doctor
- # Report whether every standalone item is linked, changing nothing.
+ # Report whether every item is linked, changing nothing.
  #
  # @operand [config_dirs...]  Config dirs (default: $CLAUDE_CONFIG_DIR or
  #                            ~/.claude)
@@ -392,18 +422,22 @@ standalone::install() {
  # @exit    0                 Healthy
  # @exit    1                 Missing, stale, or conflicting links
  ##
-standalone::doctor() {
-  standalone::_run doctor "$@"
+install::doctor() {
+  install::_run doctor "$@"
 }
 
 #@/command
- # Link standalone items into Claude Code config dirs.
+ # Link every item, fixing what can be fixed safely.
  #
- # @stderr                 Usage message
+ # @operand [config_dirs...]  Config dirs (default: $CLAUDE_CONFIG_DIR or
+ #                            ~/.claude)
  #
- # @exit    1              Prints usage and exits
+ # @stdout                    One status line per item
+ # @stderr                    Conflicts that need manual attention
+ #
+ # @exit    0                 Every item is linked
+ # @exit    1                 A conflict was left in place
  ##
-standalone() {
-  standalone::_err "Usage: standalone {install|doctor} [config_dirs...]"
-  return 1
+install() {
+  install::_run install "$@"
 }
