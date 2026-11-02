@@ -9,7 +9,7 @@ Authored customizations to pull from `~/.claude` and the Clearstory
 - [x] `eli5` output style
 - [x] `work` plugin (`standup`, `15five`; `make-it-so`, `ready-room`, and
       `state-the-nature` from Clearstory)
-- [ ] `make-it-so` (home, GitHub-generic; reconcile with `work:make-it-so`)
+- [x] `make-it-so` (home, GitHub-generic; linked skill, kept out of the Clearstory config dir by its ignore file)
 - [x] `in-my-ready-room` (as `work:ready-room`)
 - [x] `state-the-nature` (as `work:state-the-nature`)
 - [x] `git-stash-cleanup` (standalone skill)
