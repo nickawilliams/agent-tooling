@@ -14,6 +14,8 @@ questions. The repo grows toward that plan one real addition at a time.
 agent-tooling/
 ├── .claude-plugin/
 │   └── marketplace.json    # the `nickawilliams` plugin marketplace
+├── common/
+│   └── instructions/       # client-neutral AGENTS.md, linked as each config dir's CLAUDE.md
 ├── clients/
 │   └── claude/             # everything for Claude Code
 │       ├── hooks/          #   standalone hooks, linked into a config dir and merged into its settings
@@ -26,8 +28,10 @@ agent-tooling/
 └── README.md
 ```
 
-Items start complete inside `clients/<client>/`. A shared `common/` layer
-is extracted only once a second client is in use (see DESIGN.md).
+Items start complete inside `clients/<client>/`. The shared `common/` layer
+holds what is client-neutral by design, so far the global instructions;
+other items are extracted into it only once a second client uses them
+(see DESIGN.md).
 
 ## Plugins
 
@@ -78,10 +82,11 @@ or whatever `CLAUDE_CONFIG_DIR` points at).
    claude plugin install work@nickawilliams
    ```
 
-3. Link the standalone skills, hooks, and output styles (such as
-   `/recall`, the outbound-mail guard, and `ELI5`), merging each hook's
-   settings fragment into the config dir's `settings.json`, and check
-   them later with `doctor`. The script needs `jq`:
+3. Link the global instructions (as the config dir's `CLAUDE.md`) and the
+   standalone skills, hooks, and output styles (such as `/recall`, the
+   outbound-mail guard, and `ELI5`), merging each hook's settings fragment
+   into the config dir's `settings.json`, and check them later with
+   `doctor`. Pass every config dir you use. The script needs `jq`:
 
    ```bash
    clients/claude/scripts/standalone install [config_dir...]

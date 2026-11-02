@@ -110,7 +110,8 @@ agent-tooling/
 ```
 
 - **When to extract.** Move an item to `common/` when a second client
-  actually uses it. Extract the part both clients share, and leave each
+  actually uses it, or when it is client-neutral by design, as the global
+  `AGENTS.md` is; that file started `common/` on 2026-11-02. Extract the part both clients share, and leave each
   client's glue in `clients/<client>/` as an overlay.
 - **Overlays.** An item in `clients/<client>/` with the same type and name as
   one in `common/` adds to or replaces parts of it for that client.
@@ -144,6 +145,10 @@ An item that isn't part of any plugin lives at its kind's directory under
 | Skill | `skills/<name>/` | `<config_dir>/skills/<name>` |
 | Output style | `output-styles/<name>.md` | `<config_dir>/output-styles/<name>.md` |
 | Hook | `hooks/<name>/` | `<config_dir>/hooks/<name>`, plus its `settings.json` fragment merged into `<config_dir>/settings.json` |
+| Instructions | `common/instructions/AGENTS.md` | `<config_dir>/CLAUDE.md` |
+
+Sources are under `clients/claude/` except the instructions, which are the
+first item in `common/` and link to the fixed file name Claude Code reads.
 
 **Settings fragments.** A hook has no discovery directory: Claude Code
 reads hooks from `settings.json`. So a hook item is a directory holding
@@ -510,3 +515,21 @@ been silently inert.
   `PATH` reason.
 - The VS Code setting points at the repo checkout rather than a link,
   since there is one such setting and it names a file, not a directory.
+
+### Global instructions
+
+*Done 2026-11-02.* `common/instructions/AGENTS.md` is the global
+instruction file, moved from `~/Dropbox/.system/…/.ai/AGENTS.md`, where
+Dropbox synced it but nothing versioned it; the dotfiles repo never
+tracked that directory. `standalone install` links it as each config
+dir's `CLAUDE.md`, which also closed a gap: the Clearstory config dir had
+an empty `CLAUDE.md`, so sessions there ran without the house rules.
+
+- It is the first item in `common/`, ahead of a second client, because it
+  is client-neutral by design and the layout reserved the place. Codex or
+  Gemini would get it through a `clients/<name>` overlay that links the
+  same file to their own instruction path.
+- Nothing else read the Dropbox copy: `~/.ai` stays linked from the
+  dotfiles for the MCP config beside it, but `AGENTS.md` is gone from
+  there rather than replaced by a symlink, since Dropbox handles symlinks
+  out of its folder badly.

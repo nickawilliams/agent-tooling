@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 
 #?/name     standalone — Link standalone items into Claude Code config dirs
-#?/version  3.0.0
+#?/version  3.1.0
 #?/synopsis standalone {install|doctor} [config_dirs...]
 #?/description
- # Symlinks each standalone item under clients/claude/ into a config dir:
+ # Symlinks each standalone item into a config dir. From clients/claude/:
  # skills/<name>/ (a directory with SKILL.md) to <config_dir>/skills/<name>,
  # output-styles/<name>.md to <config_dir>/output-styles/<name>.md, and
  # hooks/<name>/ (a directory with settings.json) to <config_dir>/hooks/<name>.
+ # From common/: instructions/AGENTS.md to <config_dir>/CLAUDE.md, the fixed
+ # name Claude Code reads global instructions from.
  # A hook's settings.json is a fragment holding the `hooks` entries it needs
  # in <config_dir>/settings.json, with {{config_dir}} standing for the config
  # dir; install merges them in and removes entries it owns that no hook
@@ -23,10 +25,14 @@ set -euo pipefail
 
 CLIENT_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 readonly CLIENT_SRC
+REPO_ROOT="$(cd "${CLIENT_SRC}/../.." && pwd -P)"
+readonly REPO_ROOT
 
-# Item kinds, each the name of both its source dir under clients/claude/
-# and its destination dir in a config dir.
-readonly KINDS=(skills output-styles hooks)
+# Item kinds. Each names its source dir under clients/claude/ and its
+# destination dir in a config dir, except instructions, which come from
+# common/ and link to a fixed file name; see standalone::_src_root and
+# standalone::_dest.
+readonly KINDS=(instructions skills output-styles hooks)
 
 #@/private
  # Log an error message to STDERR.
@@ -75,9 +81,45 @@ standalone::_targets() {
 }
 
 #@/private
+ # Print the directory one kind's items are linked from.
+ #
+ # @operand <kind>         Item kind
+ # @stdout                 Absolute directory
+ ##
+standalone::_src_root() {
+  case "$1" in
+    instructions) echo "${REPO_ROOT}/common/instructions" ;;
+    *) echo "${CLIENT_SRC}/$1" ;;
+  esac
+}
+
+#@/private
+ # Print where one item links to in a config dir.
+ #
+ # Instructions link to CLAUDE.md, the fixed name Claude Code reads; every
+ # other kind keeps the item's own name under the kind's directory.
+ #
+ # @operand <kind>         Item kind
+ # @operand <config_dir>   Absolute config dir
+ # @operand <src>          The item's source path
+ # @stdout                 Absolute destination path
+ ##
+standalone::_dest() {
+  local kind="$1"
+  local config_dir="$2"
+  local src="$3"
+
+  case "${kind}" in
+    instructions) echo "${config_dir}/CLAUDE.md" ;;
+    *) echo "${config_dir}/${kind}/$(basename "${src}")" ;;
+  esac
+}
+
+#@/private
  # Print the source paths of one kind's items.
  #
- # @operand <kind>         `skills`, `output-styles`, or `hooks`
+ # @operand <kind>         `instructions`, `skills`, `output-styles`, or
+ #                         `hooks`
  # @stdout                 One absolute source path per line
  ##
 standalone::_sources() {
@@ -85,6 +127,10 @@ standalone::_sources() {
   local src
 
   case "${kind}" in
+    instructions)
+      src="${REPO_ROOT}/common/instructions/AGENTS.md"
+      [[ -f "${src}" ]] && echo "${src}"
+      ;;
     skills)
       for src in "${CLIENT_SRC}/skills"/*/; do
         [[ -f "${src}SKILL.md" ]] && echo "${src%/}"
@@ -235,7 +281,7 @@ standalone::_sync_hook_entries() {
  # Check, and optionally fix, one kind's links in one config dir.
  #
  # @operand <mode>         `install` to fix, `doctor` to only report
- # @operand <kind>         `skills`, `output-styles`, or `hooks`
+ # @operand <kind>         Item kind
  # @operand <config_dir>   Absolute config dir to check
  #
  # @stdout                 One status line per item
@@ -251,10 +297,11 @@ standalone::_sync() {
   local src dest link
   local problems=0
 
+  [[ "${kind}" == "instructions" ]] && dest_root="$3"
   [[ "${mode}" == "install" ]] && mkdir -p "${dest_root}"
 
   while IFS= read -r src; do
-    dest="${dest_root}/$(basename "${src}")"
+    dest="$(standalone::_dest "${kind}" "$3" "${src}")"
 
     if [[ -L "${dest}" && "$(readlink "${dest}")" == "${src}" ]]; then
       echo "ok       ${dest}"
@@ -273,7 +320,8 @@ standalone::_sync() {
   # Links into this repo whose item was removed or renamed.
   for link in "${dest_root}"/*; do
     [[ -L "${link}" ]] || continue
-    [[ "$(readlink "${link}")" == "${CLIENT_SRC}/${kind}/"* ]] || continue
+    [[ "$(readlink "${link}")" == "$(standalone::_src_root "${kind}")/"* ]] \
+      || continue
     [[ -e "${link}" ]] && continue
     if [[ "${mode}" == "install" ]]; then
       rm "${link}"

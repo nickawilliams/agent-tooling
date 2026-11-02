@@ -19,4 +19,4 @@ Authored customizations to pull from `~/.claude` and the Clearstory
 - [x] `tab-triage` (standalone skill)
 - [x] `mail-send-guard.sh` hook (standalone hook)
 - [x] `claude-vscode-wrapper.sh` (rewritten as `scripts/claude-vscode-wrapper`)
-- [ ] global `CLAUDE.md` / `AGENTS.md` (currently synced from `.system`)
+- [x] global `CLAUDE.md` / `AGENTS.md` (as `common/instructions/AGENTS.md`)
