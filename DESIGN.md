@@ -131,17 +131,29 @@ start repeating across clients, move them to `common/packages/`.
 Once `common/` exists, a plugin will need to pull items in from it. See
 the open questions on includes.
 
-### Standalone skills
+### Standalone items
 
-*Adopted.* Linked by `clients/claude/scripts/skills install`, checked by
-`skills doctor`.
+*Adopted.* Linked by `clients/claude/scripts/standalone install`, checked
+by `standalone doctor`.
 
-A skill that isn't part of any plugin lives at
-`clients/claude/skills/<name>/`, and its setup step symlinks it into
-`~/.claude/skills/<name>`. Use this for skills that must not ship inside a
-plugin, such as personal overrides of built-in command names (see
-[Command names](#command-names)). A plugin reaches everyone who installs
-it; these reach only my machines.
+An item that isn't part of any plugin lives at its kind's directory under
+`clients/claude/`, and the setup step symlinks it into each config dir:
+
+| Kind | Source | Linked as |
+|---|---|---|
+| Skill | `skills/<name>/` | `<config_dir>/skills/<name>` |
+| Output style | `output-styles/<name>.md` | `<config_dir>/output-styles/<name>.md` |
+
+**Plugin or standalone.** Ease of install doesn't decide it: both install
+in one step from the same single copy. Make an item part of a plugin when
+it belongs to a bundle, needs plugin-only features (`userConfig`, hooks,
+`${CLAUDE_PLUGIN_ROOT}`), or is meant for other people. Keep it standalone
+when it is personal, stands alone, and a namespace would add nothing, or
+when it must not ship in a plugin at all, such as a personal override of a
+built-in command name (see [Command names](#command-names)). A plugin
+reaches everyone who installs it; standalone items reach only my machines.
+Promote a standalone item into a plugin once it gains siblings or needs a
+plugin feature.
 
 ## Distribution
 
@@ -218,7 +230,7 @@ Recheck before relying on them.
   `/review` (an alias of `/code-review`). Setting `skillOverrides` to turn
   `code-review` off doesn't free the alias, it just makes `/review` fail.
   `disableBundledSkills` frees it, but turns off every bundled skill.
-- To claim such a name, use a personal [standalone skill](#standalone-skills)
+- To claim such a name, use a personal [standalone skill](#standalone-items)
   that forwards to the plugin skill, with `disable-model-invocation: true`
   so Claude only sees the real one. Keep it out of the plugin, so other
   people who install the plugin keep the built-in.

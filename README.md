@@ -16,6 +16,7 @@ agent-tooling/
 │   └── marketplace.json    # the `nickawilliams` plugin marketplace
 ├── clients/
 │   └── claude/             # everything for Claude Code
+│       ├── output-styles/  #   standalone output styles, symlinked into a config dir
 │       ├── plugins/        #   plugins, installed from the marketplace
 │       ├── scripts/        #   setup scripts
 │       └── skills/         #   standalone skills, symlinked into a config dir
@@ -70,8 +71,9 @@ or whatever `CLAUDE_CONFIG_DIR` points at).
    claude plugin install work@nickawilliams
    ```
 
-3. Link the standalone skills, and check them later with `doctor`:
+3. Link the standalone skills and output styles (such as `ELI5`), and
+   check them later with `doctor`:
 
    ```bash
-   clients/claude/scripts/skills install [config_dir...]
+   clients/claude/scripts/standalone install [config_dir...]
    ```
