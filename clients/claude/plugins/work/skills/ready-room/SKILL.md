@@ -200,8 +200,8 @@ one line each on what they deliver and what blocks what.
    - **Bug track:** if the issue already carries a diagnosis — a
      reproduction plus a root cause or an explicit hypothesis, as
      `state-the-nature` writes them — verify it still matches the
-     code and use it. Otherwise invoke the `state-the-nature` skill
-     with the Skill tool in embedded mode, passing the issue key or
+     code and use it. Otherwise invoke the `work:state-the-nature`
+     skill with the Skill tool in embedded mode, passing the issue key or
      the seed text and saying it was called from the ready room. It
      returns a verdict, its drafted Jira changes, and the root cause
      and fix options. Carry the drafts into step 6 so the user
