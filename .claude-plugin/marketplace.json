@@ -18,7 +18,7 @@
     {
       "name": "work",
       "source": "./clients/claude/plugins/work",
-      "description": "Daily work rituals, starting with standup notes built from Jira, GitHub, Slack, Calendar, meeting notes, and Claude Code sessions"
+      "description": "Daily and weekly work rituals: standup notes and the 15Five check-in, drafted from Jira, GitHub, Slack, Calendar, meeting notes, and Claude Code sessions"
     }
   ]
 }

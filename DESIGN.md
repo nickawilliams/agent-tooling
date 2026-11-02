@@ -408,15 +408,16 @@ is subordinated and both still answer to the bare `/dispatch` and `/pickup`
 
 ### `work` plugin
 
-*Done 2026-11-02.* A home for daily work rituals, starting with
-`/standup`, built in the Clearstory project config dir the same day and
-moved here once its format settled. Named for the area rather than the
-skill so siblings such as `15five` can join it; `/standup` still answers
-bare (no built-in collisions).
+*Done 2026-11-02.* A home for daily and weekly work rituals: `/standup`,
+built in the Clearstory project config dir the same day and moved here
+once its format settled, then `/15five`. Named for the area rather than
+either skill so more can join; both still answer bare (no built-in
+collisions).
 
 | From | To | Change |
 |---|---|---|
 | `standup` | `/work:standup` | Clearstory values moved to `userConfig`; examples use placeholder names |
+| `15five` | `/work:15five` | Moved nearly as is; Jira site and Slack user ID read from the shared settings |
 
 - The repo is public, so nothing employer-specific ships in the skill:
   email, Slack user ID, Jira site, standup channel, the calendar event
@@ -426,6 +427,9 @@ bare (no built-in collisions).
 - `sessions.sh` stays beside `SKILL.md` and runs via
   `${CLAUDE_PLUGIN_ROOT}`. Like `dispatches`, it skips `module-sh`; it
   needs only `jq` and a GNU-compatible `date`.
+- `15five` drives the live 15Five form through the Safari MCP tools and
+  stops before Submit. 15Five's URLs and form selectors are the product's
+  own, not employer-specific, so they stay in the skill.
 - Graphiti is optional: with no server configured, the reconciliation
   baseline comes from Granola or the last Slack post and nothing is
   persisted.
