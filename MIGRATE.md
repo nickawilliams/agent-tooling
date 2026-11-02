@@ -15,7 +15,7 @@ Authored customizations to pull from `~/.claude` and the Clearstory
 - [x] `git-stash-cleanup` (standalone skill)
 - [x] `recall` (standalone skill)
 - [x] `restate` (standalone skill)
-- [ ] `fix-console-errors`
+- [x] `fix-console-errors` (standalone skill, rewritten on arrival)
 - [ ] `tab-triage`
 - [x] `mail-send-guard.sh` hook (standalone hook)
 - [ ] `claude-vscode-wrapper.sh`
