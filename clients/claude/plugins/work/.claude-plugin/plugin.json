@@ -1,6 +1,6 @@
 {
   "name": "work",
-  "description": "Work-tracker workflows: standup notes and the 15Five check-in drafted from Jira, GitHub, Slack, Calendar, meeting notes, and Claude Code sessions, and make-it-so, which takes a Jira issue to a merge-ready PR through foreman",
+  "description": "Work-tracker workflows: standup notes and the 15Five check-in drafted from Jira, GitHub, Slack, Calendar, meeting notes, and Claude Code sessions; ready-room, which gets a Jira issue ready to implement; and make-it-so, which takes it to a merge-ready PR through foreman",
   "author": {
     "name": "nickawilliams"
   },

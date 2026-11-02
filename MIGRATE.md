@@ -7,9 +7,10 @@ Authored customizations to pull from `~/.claude` and the Clearstory
 - [x] `relay` plugin (`dispatch`, `pickup`)
 - [x] `review` forwarder skill
 - [x] `eli5` output style
-- [x] `work` plugin (`standup`, `15five`, `make-it-so` from Clearstory)
+- [x] `work` plugin (`standup`, `15five`, `make-it-so` and `ready-room` from
+      Clearstory)
 - [ ] `make-it-so` (home, GitHub-generic; reconcile with `work:make-it-so`)
-- [ ] `in-my-ready-room`
+- [x] `in-my-ready-room` (as `work:ready-room`)
 - [ ] `state-the-nature`
 - [x] `git-stash-cleanup` (standalone skill)
 - [x] `recall` (standalone skill)

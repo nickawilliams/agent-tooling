@@ -139,10 +139,10 @@ directly.
    production data, a product call, or someone else's input. A
    question settled in a later comment is not open. If any blocking
    question remains, stop before `foreman start`: list each one and
-   quote where it appears. Don't research it yourself: the answer
-   belongs in Jira, where this skill reads it on the next run. When
-   the `in-my-ready-room` skill is installed, point the user to
-   `/in-my-ready-room <KEY>`, which records answers there.
+   quote where it appears, and point the user to
+   `/work:ready-room <KEY>`. Don't research it yourself: that skill
+   records the answer in Jira, where this one reads it on the next
+   run.
    Extra instructions after the key that settle a question, or tell
    you to proceed anyway, override this check.
 
