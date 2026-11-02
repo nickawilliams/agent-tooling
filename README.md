@@ -63,6 +63,9 @@ this checkout.
 
 ## Install
 
+On my machines the dotfiles installer runs these steps; they are listed
+here for doing them by hand.
+
 Run these for each Claude Code config dir in use (`~/.claude` by default,
 or whatever `CLAUDE_CONFIG_DIR` points at).
 

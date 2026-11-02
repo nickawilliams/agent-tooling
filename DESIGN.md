@@ -529,7 +529,13 @@ an empty `CLAUDE.md`, so sessions there ran without the house rules.
   is client-neutral by design and the layout reserved the place. Codex or
   Gemini would get it through a `clients/<name>` overlay that links the
   same file to their own instruction path.
-- Nothing else read the Dropbox copy: `~/.ai` stays linked from the
-  dotfiles for the MCP config beside it, but `AGENTS.md` is gone from
-  there rather than replaced by a symlink, since Dropbox handles symlinks
-  out of its folder badly.
+- Nothing else read the Dropbox copy, and the rest of the `.ai`
+  directory was dead (an empty MCP config and a stale settings copy), so
+  the dotfiles installer no longer links `~/.ai` and the directory is
+  gone. Sync across machines is unchanged: the repo itself lives in
+  Dropbox, so the working tree propagates the same way the old copy did,
+  with git for history.
+- The dotfiles installer (`.system/macos/install.sh`, step Agent Tooling)
+  runs `standalone install` against `~/.claude` and, when `claude` is
+  present, adds the marketplace and installs the plugins. That is the
+  rebuild path; the README steps are the same commands by hand.
