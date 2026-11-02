@@ -39,6 +39,24 @@ remain and neither is obviously right — name the candidates in the
 question. State the key you settled on and where it came from
 before starting work.
 
+## Settings
+
+These come from the `work` plugin's settings (`/config`, or `claude
+plugin configure work`):
+
+| Setting | Value |
+| --- | --- |
+| `jira_site` | `${user_config.jira_site}` |
+| `foreman_project` | `${user_config.foreman_project}` |
+
+A value that is empty, or still reads as a literal `${user_config…}`
+placeholder (as it does when this file is read directly rather than
+loaded as a plugin skill), is unset. Without `jira_site`, take the
+cloudId from `getAccessibleAtlassianResources`. Without
+`foreman_project`, foreman must find its project from the cwd (see
+**Project root** below); if it can't, ask for the root rather than
+guessing.
+
 ## Foreman
 
 Branch/worktree setup and PR posting go through the `foreman` CLI
@@ -70,13 +88,14 @@ a terminal, so drive it with these rules:
   line even on exit 0 (reviewer, assignee, and notification
   failures are best-effort and don't fail the command), and verify
   outcomes with git and `gh` rather than trusting the transcript.
-- **Project root.** Foreman finds its project by walking up from the
-  cwd to a `.foreman/` directory — normally `~/Projects/Clearstory`.
-  Repository names are that root's directory names (`extracker`,
-  `legacy-api`, …). Workspaces live under `workspace.root`
-  (`_workspaces/`), one per issue, laid out as
-  `<root>/_workspaces/<branch>/<repo>`. Pass `--project <root>`
-  whenever the cwd is outside it.
+- **Project root.** `<root>` is the `foreman_project` setting when
+  set. Otherwise foreman finds its project by walking up from the
+  cwd to a `.foreman/` directory, and `<root>` is that directory's
+  parent. Repository names are that root's directory names (`api`,
+  `web`, …). Workspaces live under `<root>/<wsroot>`, where
+  `<wsroot>` is `workspace.root` in `<root>/.foreman/config.yaml`,
+  one per issue, laid out as `<root>/<wsroot>/<branch>/<repo>`.
+  Pass `--project <root>` whenever the cwd is outside it.
 
 Foreman owns the issue's lifecycle state: `start` moves it to In
 Progress, `review` moves it to Review. Those transitions are
@@ -87,17 +106,16 @@ directly.
 ## Workflow
 
 1. **Pre-flight.** Fetch the issue from Jira with the Atlassian MCP
-   tools (`getAccessibleAtlassianResources` for the cloudId, then
-   `getJiraIssue`) and verify it's real and still open — if it's
-   already Done, Resolved, or Closed, stop and ask. Then classify the
-   current checkout:
+   tools (`getJiraIssue`, cloudId `jira_site`) and verify it's real
+   and still open — if it's already Done, Resolved, or Closed, stop
+   and ask. Then classify the current checkout:
 
    - **Already set up:** the cwd is a git checkout on a non-default
      branch that plausibly belongs to this issue (name or path
      carries the key, or the user said so). Take it as given and
      skip step 2. `git fetch` the remote.
    - **Inside the issue's workspace, but not a repo** (the cwd is
-     `<root>/_workspaces/<ws>` and `<ws>` carries the key): the
+     `<root>/<wsroot>/<ws>` and `<ws>` carries the key): the
      workspace is already chosen. Go to step 2 and use it.
    - **Anything else** (project root, a repo on its default branch,
      a branch for a different issue, outside the project): go to
@@ -120,10 +138,11 @@ directly.
    repos change, and the code alone can't answer it — it needs
    production data, a product call, or someone else's input. A
    question settled in a later comment is not open. If any blocking
-   question remains, stop before `foreman start`: list each one,
-   quote where it appears, and point the user to
-   `/in-my-ready-room <KEY>`. Don't research it yourself — that
-   skill records the answer in Jira, where this one can read it.
+   question remains, stop before `foreman start`: list each one and
+   quote where it appears. Don't research it yourself: the answer
+   belongs in Jira, where this skill reads it on the next run. When
+   the `in-my-ready-room` skill is installed, point the user to
+   `/in-my-ready-room <KEY>`, which records answers there.
    Extra instructions after the key that settle a question, or tell
    you to proceed anyway, override this check.
 
@@ -149,7 +168,7 @@ directly.
    from matching `EX-1234`:
 
    ```bash
-   find -E <root>/_workspaces -mindepth 1 -maxdepth 2 -type d \
+   find -E <root>/<wsroot> -mindepth 1 -maxdepth 2 -type d \
      -iregex '.*/<KEY>([^0-9][^/]*)?'
    ```
 
@@ -191,7 +210,7 @@ directly.
 
    - "A. Create the configuration schema and transition view" →
      `a-config-schema-transition-view`
-   - "Timecard sync improvements for the extracker integration" →
+   - "Timecard sync improvements for the payroll integration" →
      `timecard-sync-improvements`
 
    When the user wants a new workspace alongside an existing one,
@@ -213,7 +232,7 @@ directly.
    `foreman start` for it again, and always pass `--workspace` to
    the other foreman commands.
 
-   Either way, the worktree is `<root>/_workspaces/<ws>/<repo>`;
+   Either way, the worktree is `<root>/<wsroot>/<ws>/<repo>`;
    confirm it exists (`git -C <path> branch --show-current`) rather
    than trusting foreman's output. `cd` into it; the Bash tool keeps
    that cwd for the rest of the session. Never call
@@ -306,9 +325,10 @@ directly.
    you, and skips any repo whose branch has no remote head.
 
 7. **Independent review — before the PR exists.** Opening the PR
-   requests the team's review and announces it in Slack, so the
-   self-review comes first. Spawn a subagent with a completely fresh
-   context to review the pushed branch. Give it only: the worktree
+   requests the team's review and, where the project's foreman config
+   says so, announces it in Slack, so the self-review comes first.
+   Spawn a subagent with a completely fresh context to review the
+   pushed branch. Give it only: the worktree
    path, the branch and its base (`origin/<default>`), the Jira
    issue key, and instructions to be adversarial, read the full diff
    (`git diff origin/<default>...HEAD`) plus surrounding code,

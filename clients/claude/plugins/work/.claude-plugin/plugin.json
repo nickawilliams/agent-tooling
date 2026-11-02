@@ -45,6 +45,11 @@
       "type": "string",
       "title": "Session directory regex",
       "description": "Anchored regex matching the working directories of Claude Code sessions that count as work, e.g. ^/Users/me/src/acme"
+    },
+    "foreman_project": {
+      "type": "string",
+      "title": "Foreman project root",
+      "description": "Directory holding the .foreman/ config, e.g. ~/src/acme. /make-it-so passes it as --project. Leave empty to let foreman find the project from the working directory."
     }
   }
 }

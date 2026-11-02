@@ -40,10 +40,11 @@ is extracted only once a second client is in use (see DESIGN.md).
 setting (in `/config`). Leave it empty to sweep GitHub review requests only.
 
 `work` asks for its settings at install (work email, Slack user ID, Jira
-site, standup channel and calendar events, repo globs, and a session
-directory regex). Change them later in `/config` or with
-`claude plugin configure work`. `/standup` also uses a Graphiti memory
-server when one is configured.
+site, standup channel and calendar events, repo globs, a session
+directory regex, and the foreman project root). Change them later in
+`/config` or with `claude plugin configure work`. `/standup` also uses a
+Graphiti memory server when one is configured. `/make-it-so` drives the
+`foreman` CLI, which must be on `PATH`.
 
 `relay` ships a `SessionStart` hook that announces work dispatched to a repo
 and still waiting there. Its oh-my-posh status-line count is separate glue
