@@ -143,11 +143,26 @@ An item that isn't part of any plugin lives at its kind's directory under
 |---|---|---|
 | Skill | `skills/<name>/` | `<config_dir>/skills/<name>` |
 | Output style | `output-styles/<name>.md` | `<config_dir>/output-styles/<name>.md` |
+| Hook | `hooks/<name>/` | `<config_dir>/hooks/<name>`, plus its `settings.json` fragment merged into `<config_dir>/settings.json` |
+
+**Settings fragments.** A hook has no discovery directory: Claude Code
+reads hooks from `settings.json`. So a hook item is a directory holding
+the script and a `settings.json` fragment, the `hooks` object its entries
+belong in, with the literal `{{config_dir}}` standing for the config dir
+(hook commands get no variable for it). `install` substitutes the path,
+adds each entry the config dir's `settings.json` lacks, and removes
+entries it owns that no item wants any more; `doctor` reports both. An
+entry is owned when one of its commands names a path under
+`<config_dir>/hooks/`. Nothing else in the file is touched; `jq` rewrites
+it and keeps its two-space layout. Permission allowlists can use the same
+merge when they arrive.
 
 **Plugin or standalone.** Ease of install doesn't decide it: both install
 in one step from the same single copy. Make an item part of a plugin when
-it belongs to a bundle, needs plugin-only features (`userConfig`, hooks,
-`${CLAUDE_PLUGIN_ROOT}`), or is meant for other people. Keep it standalone
+it belongs to a bundle, needs plugin-only features (`userConfig`,
+`${CLAUDE_PLUGIN_ROOT}`), or is meant for other people. A hook on its own
+is standalone too; a hook that belongs with a skill ships in that skill's
+plugin, as `relay`'s does. Keep it standalone
 when it is personal, stands alone, and a namespace would add nothing, or
 when it must not ship in a plugin at all, such as a personal override of a
 built-in command name (see [Command names](#command-names)). A plugin
@@ -454,13 +469,15 @@ collisions).
   which must be on `PATH`. The GitHub-generic `make-it-so` in
   `~/.claude/skills` is still separate; reconciling the two is open.
 
-### `mail` plugin
+### `mail-send-guard` hook
 
-*Done 2026-11-02.* Home for the `mail-send-guard` hook, moved from
-`~/.claude/hooks/` together with its hand-wired `PreToolUse` entry in
-`~/.claude/settings.json`, which is removed. A hook is a plugin-only
-feature, so this is a plugin even with no skills; it's named for the
-area so mail skills can join it later.
+*Done 2026-11-02.* The outbound-mail guard, moved from `~/.claude/hooks/`
+and its hand-wired `PreToolUse` entry in `~/.claude/settings.json` to the
+standalone `hooks/` kind. For about an hour the same day it shipped as a
+one-hook `mail` plugin, because a plugin's `hooks.json` was the only
+one-step install that existed; the settings-fragment merge in
+`standalone install` replaced that, and the plugin was removed before
+anything but this machine installed it.
 
 - The hook matches the Mail MCP server's send tools by basename
   (`smtp_send_message`, `smtp_reply_message`, `graph_send_message`,
@@ -469,6 +486,6 @@ area so mail skills can join it later.
   `bypassPermissions` mode skips, and `deny` when `smtp_send_message`
   carries hand-built `in_reply_to` or `references` values, which must
   come from the server via `smtp_reply_message`.
-- The script drops its `.sh` extension (executables have none here) and
-  runs via `${CLAUDE_PLUGIN_ROOT}`. Like the other shipped hook scripts
-  it skips `module-sh`; it needs only `bash` and `jq`.
+- The script has no `.sh` extension (executables have none here) and
+  needs only `bash` and `jq`. `standalone` itself now needs `jq` too, for
+  the merge.

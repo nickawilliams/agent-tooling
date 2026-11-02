@@ -19,11 +19,6 @@
       "name": "work",
       "source": "./clients/claude/plugins/work",
       "description": "Daily and weekly work rituals: standup notes and the 15Five check-in, drafted from Jira, GitHub, Slack, Calendar, meeting notes, and Claude Code sessions"
-    },
-    {
-      "name": "mail",
-      "source": "./clients/claude/plugins/mail",
-      "description": "Guards outbound mail: a PreToolUse hook that asks before every Mail MCP send and denies sends that hand-build threading headers"
     }
   ]
 }

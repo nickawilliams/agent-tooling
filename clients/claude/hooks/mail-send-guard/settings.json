@@ -1,5 +1,4 @@
 {
-  "description": "Gates the Mail MCP server's send tools: asks for confirmation on every send, which bypassPermissions mode would otherwise skip, and denies smtp_send_message calls that carry hand-built threading headers.",
   "hooks": {
     "PreToolUse": [
       {
@@ -7,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/mail-send-guard\"",
+            "command": "bash \"{{config_dir}}/hooks/mail-send-guard/mail-send-guard\"",
             "timeout": 10,
             "statusMessage": "Checking outbound mail..."
           }

@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 
 #?/name     standalone — Link standalone items into Claude Code config dirs
-#?/version  2.0.0
+#?/version  3.0.0
 #?/synopsis standalone {install|doctor} [config_dirs...]
 #?/description
  # Symlinks each standalone item under clients/claude/ into a config dir:
  # skills/<name>/ (a directory with SKILL.md) to <config_dir>/skills/<name>,
- # and output-styles/<name>.md to <config_dir>/output-styles/<name>.md. A
- # config dir defaults to $CLAUDE_CONFIG_DIR, or ~/.claude when that is
- # unset. Never replaces anything that isn't one of its own links, and
- # removes its links whose item no longer exists.
+ # output-styles/<name>.md to <config_dir>/output-styles/<name>.md, and
+ # hooks/<name>/ (a directory with settings.json) to <config_dir>/hooks/<name>.
+ # A hook's settings.json is a fragment holding the `hooks` entries it needs
+ # in <config_dir>/settings.json, with {{config_dir}} standing for the config
+ # dir; install merges them in and removes entries it owns that no hook
+ # wants any more. A config dir defaults to $CLAUDE_CONFIG_DIR, or ~/.claude
+ # when that is unset. Never replaces anything that isn't one of its own
+ # links or entries, and removes its links whose item no longer exists.
+ # Needs jq.
  ##
 
 source module
@@ -21,7 +26,7 @@ readonly CLIENT_SRC
 
 # Item kinds, each the name of both its source dir under clients/claude/
 # and its destination dir in a config dir.
-readonly KINDS=(skills output-styles)
+readonly KINDS=(skills output-styles hooks)
 
 #@/private
  # Log an error message to STDERR.
@@ -31,6 +36,27 @@ readonly KINDS=(skills output-styles)
  ##
 standalone::_err() {
   echo "standalone: ERROR: $*" >&2
+}
+
+#@/private
+ # Print a config dir as an absolute physical path.
+ #
+ # @operand <dir>          Config dir, possibly relative or through symlinks
+ #
+ # @stdout                 Absolute path
+ # @stderr                 Error when the dir doesn't exist
+ #
+ # @exit    0              Printed
+ # @exit    1              The dir doesn't exist
+ ##
+standalone::_abs() {
+  local dir="$1"
+
+  if [[ ! -d "${dir}" ]]; then
+    standalone::_err "config dir does not exist: ${dir}"
+    return 1
+  fi
+  (cd "${dir}" && pwd -P)
 }
 
 #@/private
@@ -51,7 +77,7 @@ standalone::_targets() {
 #@/private
  # Print the source paths of one kind's items.
  #
- # @operand <kind>         `skills` or `output-styles`
+ # @operand <kind>         `skills`, `output-styles`, or `hooks`
  # @stdout                 One absolute source path per line
  ##
 standalone::_sources() {
@@ -69,16 +95,148 @@ standalone::_sources() {
         [[ -f "${src}" ]] && echo "${src}"
       done
       ;;
+    hooks)
+      for src in "${CLIENT_SRC}/hooks"/*/; do
+        [[ -f "${src}settings.json" ]] && echo "${src%/}"
+      done
+      ;;
   esac
   return 0
+}
+
+#@/private
+ # Print the settings entries every hook item wants in one config dir.
+ #
+ # Reads each hook's settings.json fragment, replaces the literal
+ # {{config_dir}} in its strings with the config dir, and flattens its
+ # `hooks` object into one record per entry.
+ #
+ # @operand <config_dir>   Absolute config dir
+ #
+ # @stdout                 JSON array of {name, event, entry}
+ ##
+standalone::_hook_entries() {
+  local config_dir="$1"
+  local src
+
+  while IFS= read -r src; do
+    jq -c --arg name "$(basename "${src}")" --arg dir "${config_dir}" '
+      walk(if type == "string"
+           then gsub("\\{\\{config_dir\\}\\}"; $dir) else . end)
+      | .hooks // {} | to_entries[] | .key as $event
+      | .value[] | {name: $name, event: $event, entry: .}
+    ' "${src}/settings.json"
+  done < <(standalone::_sources hooks) | jq -sc '.'
+}
+
+#@/private
+ # Check, and optionally fix, the hook entries in a config dir's settings.
+ #
+ # An entry in settings.json belongs to this script when one of its
+ # commands names a path under <config_dir>/hooks/. Entries a hook item
+ # wants are added when missing; owned entries no item wants any more are
+ # removed. Nothing else in the file is touched.
+ #
+ # @operand <mode>         `install` to fix, `doctor` to only report
+ # @operand <config_dir>   Absolute config dir
+ #
+ # @writes  <config_dir>/settings.json   In install mode, when changed
+ #
+ # @stdout                 One status line per entry
+ # @stderr                 Errors from jq or the write
+ #
+ # @exit    0              Every wanted entry is present, none is stale
+ # @exit    1              Something is missing or stale
+ ##
+standalone::_sync_hook_entries() {
+  local mode="$1"
+  local config_dir="$2"
+  local settings="${config_dir}/settings.json"
+  local prefix="${config_dir}/hooks/"
+  local current wanted report status event name tmp
+  local problems=0
+
+  wanted="$(standalone::_hook_entries "${config_dir}")"
+  if [[ -f "${settings}" ]]; then
+    current="$(cat "${settings}")"
+  else
+    current='{}'
+  fi
+
+  report="$(jq -r --argjson wanted "${wanted}" --arg prefix "${prefix}" '
+    def owned: any(.hooks[]? | .command // ""; contains($prefix));
+    def owner_name:
+      (first(.hooks[]? | .command // "" | select(contains($prefix)))
+       | split($prefix)[1] | split("/")[0]) // "?";
+    (.hooks // {}) as $h
+    | ($wanted[] | . as $w
+       | if ($h[$w.event] // [] | any(.[]; . == $w.entry))
+         then "ok \($w.event) \($w.name)"
+         else "missing \($w.event) \($w.name)" end),
+      ($h | to_entries[] | .key as $event | .value[] | . as $entry
+       | select(owned)
+       | select(($wanted | any(.[]; .event == $event and .entry == $entry))
+                | not)
+       | "stale \($event) \(owner_name)")
+  ' <<< "${current}")"
+
+  while IFS=' ' read -r status event name; do
+    [[ -n "${status}" ]] || continue
+    case "${status}" in
+      ok)
+        echo "ok       ${settings} ${event} ${name}"
+        ;;
+      missing)
+        if [[ "${mode}" == "install" ]]; then
+          echo "merged   ${settings} ${event} ${name}"
+        else
+          echo "missing  ${settings} ${event} ${name}"
+          (( problems++ )) || true
+        fi
+        ;;
+      stale)
+        if [[ "${mode}" == "install" ]]; then
+          echo "removed  ${settings} ${event} ${name}"
+        else
+          echo "stale    ${settings} ${event} ${name}"
+          (( problems++ )) || true
+        fi
+        ;;
+    esac
+  done <<< "${report}"
+
+  if [[ "${mode}" == "install" ]] \
+      && grep -Eq '^(missing|stale) ' <<< "${report}"; then
+    tmp="$(mktemp "${settings}.XXXXXX")"
+    jq --argjson wanted "${wanted}" --arg prefix "${prefix}" '
+      def owned: any(.hooks[]? | .command // ""; contains($prefix));
+      def wanted_for($event):
+        [$wanted[] | select(.event == $event) | .entry];
+      (.hooks // {}) as $h
+      | ([$h | keys[]] + [$wanted[].event] | unique) as $events
+      | .hooks = ([ $events[] | . as $event | ($h[$event] // []) as $cur
+          | { key: $event,
+              value: ([ $cur[] | . as $e
+                        | select((owned
+                                  and (wanted_for($event)
+                                       | any(.[]; . == $e) | not))
+                                 | not) ]
+                      + [ wanted_for($event)[] | . as $w
+                          | select($cur | any(.[]; . == $w) | not) ]) }
+        ] | map(select(.value | length > 0)) | from_entries)
+      | if (.hooks | length) == 0 then del(.hooks) else . end
+    ' <<< "${current}" > "${tmp}" && mv "${tmp}" "${settings}"
+  fi
+
+  (( problems == 0 ))
 }
 
 #@/private
  # Check, and optionally fix, one kind's links in one config dir.
  #
  # @operand <mode>         `install` to fix, `doctor` to only report
- # @operand <kind>         `skills` or `output-styles`
- # @operand <config_dir>   Config dir to check
+ # @operand <kind>         `skills`, `output-styles`, or `hooks`
+ # @operand <config_dir>   Absolute config dir to check
  #
  # @stdout                 One status line per item
  # @stderr                 Conflicts that need manual attention
@@ -126,6 +284,10 @@ standalone::_sync() {
     fi
   done
 
+  if [[ "${kind}" == "hooks" ]]; then
+    standalone::_sync_hook_entries "${mode}" "$3" || (( problems++ )) || true
+  fi
+
   (( problems == 0 ))
 }
 
@@ -145,6 +307,7 @@ standalone::_run() {
   local failed=0
 
   while IFS= read -r dir; do
+    dir="$(standalone::_abs "${dir}")" || { failed=1; continue; }
     for kind in "${KINDS[@]}"; do
       standalone::_sync "${mode}" "${kind}" "${dir}" || failed=1
     done
