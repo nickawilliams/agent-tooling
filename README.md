@@ -71,8 +71,8 @@ or whatever `CLAUDE_CONFIG_DIR` points at).
    claude plugin install work@nickawilliams
    ```
 
-3. Link the standalone skills and output styles (such as `ELI5`), and
-   check them later with `doctor`:
+3. Link the standalone skills and output styles (such as `/recall` and
+   `ELI5`), and check them later with `doctor`:
 
    ```bash
    clients/claude/scripts/standalone install [config_dir...]

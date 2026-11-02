@@ -13,7 +13,7 @@ Authored customizations to pull from `~/.claude` and the Clearstory
 - [ ] `state-the-nature`
 - [ ] `start-work`
 - [ ] `git-stash-cleanup`
-- [ ] `recall`
+- [x] `recall` (standalone skill)
 - [ ] `restate`
 - [ ] `fix-console-errors`
 - [ ] `tab-triage`
