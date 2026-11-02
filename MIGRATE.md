@@ -11,7 +11,7 @@ Authored customizations to pull from `~/.claude` and the Clearstory
 - [ ] `make-it-so` (home, GitHub-generic; reconcile with `work:make-it-so`)
 - [ ] `in-my-ready-room`
 - [ ] `state-the-nature`
-- [ ] `git-stash-cleanup`
+- [x] `git-stash-cleanup` (standalone skill)
 - [x] `recall` (standalone skill)
 - [x] `restate` (standalone skill)
 - [ ] `fix-console-errors`
