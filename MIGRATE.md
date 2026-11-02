@@ -16,7 +16,7 @@ Authored customizations to pull from `~/.claude` and the Clearstory
 - [x] `recall` (standalone skill)
 - [x] `restate` (standalone skill)
 - [x] `fix-console-errors` (standalone skill, rewritten on arrival)
-- [ ] `tab-triage`
+- [x] `tab-triage` (standalone skill)
 - [x] `mail-send-guard.sh` hook (standalone hook)
 - [ ] `claude-vscode-wrapper.sh`
 - [ ] global `CLAUDE.md` / `AGENTS.md` (currently synced from `.system`)
