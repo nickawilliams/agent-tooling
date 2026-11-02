@@ -430,6 +430,9 @@ collisions).
 |---|---|---|
 | `standup` | `/work:standup` | Clearstory values moved to `userConfig`; examples use placeholder names |
 | `15five` | `/work:15five` | Moved nearly as is; Jira site and Slack user ID read from the shared settings |
+| `make-it-so` (Clearstory) | `/work:make-it-so` | Project root from a new `foreman_project` setting; workspace root read from the foreman config; generic repo names |
+| `in-my-ready-room` | `/work:ready-room` | Renamed; same settings; GitHub org taken from a repo remote |
+| `state-the-nature` | `/work:state-the-nature` | Same settings and org change; cross-references use full plugin names |
 
 - The repo is public, so nothing employer-specific ships in the skill:
   email, Slack user ID, Jira site, standup channel, the calendar event
@@ -445,6 +448,11 @@ collisions).
 - Graphiti is optional: with no server configured, the reconciliation
   baseline comes from Granola or the last Slack post and nothing is
   persisted.
+- The three Jira lifecycle skills moved in on 2026-11-02 and call each
+  other by full name (`/work:ready-room`, `work:state-the-nature`), so a
+  later install can't take the names over. They drive the `foreman` CLI,
+  which must be on `PATH`. The GitHub-generic `make-it-so` in
+  `~/.claude/skills` is still separate; reconciling the two is open.
 
 ### `mail` plugin
 
