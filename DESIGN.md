@@ -436,7 +436,7 @@ collisions).
   titles that set the evidence cutoff, repo globs, and the session cwd
   regex are all `userConfig`. An unset value degrades its source and is
   named in the footer rather than failing the run.
-- `sessions.sh` stays beside `SKILL.md` and runs via
+- `sessions` stays beside `SKILL.md` and runs via
   `${CLAUDE_PLUGIN_ROOT}`. Like `dispatches`, it skips `module-sh`; it
   needs only `jq` and a GNU-compatible `date`.
 - `15five` drives the live 15Five form through the Safari MCP tools and

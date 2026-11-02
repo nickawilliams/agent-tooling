@@ -8,7 +8,7 @@
  # session received inside a time window, for the `standup` skill.
  #
  # Ships inside the `work` plugin and runs as
- # ${CLAUDE_PLUGIN_ROOT}/skills/standup/sessions.sh. House shell conventions
+ # ${CLAUDE_PLUGIN_ROOT}/skills/standup/sessions. House shell conventions
  # (module-sh) are deliberately not applied: a plugin script can't assume
  # tools beyond jq and a GNU-compatible date (gdate on macOS).
  ##

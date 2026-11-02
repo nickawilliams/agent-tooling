@@ -15,6 +15,11 @@ Items marked *Open* in `DESIGN.md` are the user's decisions. When an
 addition forces one (the marketplace name, for example), ask rather than
 choosing, then record the answer in `DESIGN.md`.
 
+## Scripts
+
+Executable scripts have no extension (`standalone`, `dispatches`,
+`sessions`). Reserve `.sh` for sourced, non-executable libraries.
+
 ## Commits
 
 Commit straight to `main` and push without asking. I'm the only consumer
