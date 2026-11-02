@@ -490,3 +490,23 @@ anything but this machine installed it.
 - The script has no `.sh` extension (executables have none here) and
   needs only `bash` and `jq`. `standalone` itself now needs `jq` too, for
   the merge.
+
+### VS Code wrapper
+
+*Done 2026-11-02.* `clients/claude/scripts/claude-vscode-wrapper` is the
+`claudeCode.claudeProcessWrapper` for the VS Code extension. It replaces
+a script in the Clearstory config dir that hardcoded that one project and
+still named the config dir by a path renamed months earlier, so it had
+been silently inert.
+
+- The wrapper knows no projects. It runs the CLI through `direnv exec`
+  for the workspace directory, so the `.envrc` that sets
+  `CLAUDE_CONFIG_DIR` in the terminal governs VS Code too, and the two
+  can't drift again. Without direnv, or with a blocked `.envrc`, the CLI
+  runs unchanged.
+- Plain bash, no `module-sh`: VS Code launches it with its own `PATH`,
+  and module routing would treat the wrapped command as a subcommand.
+  It looks in the usual package-manager bin dirs for direnv for the same
+  `PATH` reason.
+- The VS Code setting points at the repo checkout rather than a link,
+  since there is one such setting and it names a file, not a directory.

@@ -19,7 +19,7 @@ agent-tooling/
 │       ├── hooks/          #   standalone hooks, linked into a config dir and merged into its settings
 │       ├── output-styles/  #   standalone output styles, symlinked into a config dir
 │       ├── plugins/        #   plugins, installed from the marketplace
-│       ├── scripts/        #   setup scripts
+│       ├── scripts/        #   setup scripts and the VS Code process wrapper
 │       └── skills/         #   standalone skills, symlinked into a config dir
 ├── AGENTS.md               # guidelines for agents working in this repo
 ├── DESIGN.md               # master plan
@@ -86,3 +86,9 @@ or whatever `CLAUDE_CONFIG_DIR` points at).
    ```bash
    clients/claude/scripts/standalone install [config_dir...]
    ```
+
+4. If a project's `.envrc` sets `CLAUDE_CONFIG_DIR`, point the VS Code
+   extension's `claudeCode.claudeProcessWrapper` setting at
+   `clients/claude/scripts/claude-vscode-wrapper`. It runs the CLI through
+   `direnv exec` for the workspace, so VS Code and the terminal use the
+   same config dir.

@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+
+#?/name     claude-vscode-wrapper — Launch Claude Code under the workspace's direnv
+#?/version  2.0.0
+#?/synopsis claude-vscode-wrapper <command> [args...]
+#?/description
+ # Process wrapper for the VS Code Claude Code extension
+ # (`claudeCode.claudeProcessWrapper`). The extension doesn't load direnv,
+ # so a workspace whose .envrc sets CLAUDE_CONFIG_DIR would otherwise run
+ # against the home config dir. This runs the command through
+ # `direnv exec` for the current directory, which VS Code sets to the
+ # workspace root, so the same .envrc governs VS Code and the terminal.
+ # Without direnv, or with a blocked .envrc, the command runs unchanged.
+ #
+ # Plain bash on purpose: VS Code launches this with its own PATH, and
+ # module-sh would route the wrapped command as a subcommand.
+ ##
+
+set -euo pipefail
+
+# VS Code's PATH often lacks the package manager's bin dir.
+for candidate in direnv /opt/homebrew/bin/direnv /opt/local/bin/direnv \
+    /usr/local/bin/direnv; do
+  if command -v "${candidate}" > /dev/null 2>&1; then
+    exec "${candidate}" exec "${PWD}" "$@"
+  fi
+done
+
+exec "$@"
