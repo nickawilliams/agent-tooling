@@ -1,79 +1,80 @@
 ---
 name: fix-console-errors
-description: Systematically assess, fix, and commit browser console errors one at a time. Use when the user wants to work through console errors/warnings.
+description: Work through a web app's browser console errors and warnings one at a time, reading the console through a connected browser tool, fixing each, verifying it is gone, and committing each fix on its own. Use when the user wants the console cleaned up.
 disable-model-invocation: true
-user-invocable: true
-argument-hint: ""
+argument-hint: "[url]"
 ---
 
-Systematically assess, fix, and commit browser console errors using the workflow below.
+Clear the browser console of the app at $ARGUMENTS, one entry at a
+time. Each fix is verified against the live console before and after,
+and lands as its own commit.
 
-## 1. Initial Error Assessment
+## Reach the console
 
-Ask the user to open the browser console and share the current errors. From the list, create a todo list with each error as a separate item. Include a proposed commit message for each.
+Read the console yourself through whichever browser tool this session
+has. In order of preference:
 
-### Todo Item Structure
+1. A tab already showing the app, in any connected browser tool.
+2. Scape's browser (`scape_browser_*`), when running inside Scape.
+3. Claude in Chrome (`mcp__claude-in-chrome__*`), loading its tools with
+   one ToolSearch call and following its skill first.
+4. The Safari or Chrome MCP servers.
 
-Each todo item should contain:
-- Error description and location
-- Proposed commit message
-- Mark exactly one item as `in_progress` at a time
+With a URL argument, open it in that tool. Without one, use the tab
+that shows the app, or ask for the URL. If no browser tool is connected,
+ask the user to paste the console output and to reload when told to;
+the rest of the workflow is the same, only slower.
 
-### Commit Message Format
+Capture errors and warnings from a fresh load: clear the console,
+reload, let the page settle, then read. Repeat the reads for any
+interaction the user names as part of the reproduction.
 
-Use [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) format.
+## Build the list
 
-Some latitude with the commit message contents is allowed on a case-by-case basis as long as it aligns with conventional commits and clearly describes the fix. In these cases, prompt the user for confirmation first.
+Group repeated entries into one item: the same message from the same
+source, logged once per render or per request, is one problem. Record
+for each item the level, the message, the source location if the
+console gives one, and the count. Order by level (errors first), then
+by count. Present the list and the planned order before changing
+anything. Entries from browser extensions or third-party scripts the
+repo can't change are listed, marked out of scope, and skipped.
 
-For simple self-explanatory fixes, use a single line. For more complex fixes, use the multi-line format.
+Track progress with the todo list, one item per problem, exactly one
+`in_progress` at a time.
 
-#### Single Line
+## Work the list
 
-```
-fix(<logging_level>): <error_message>
-```
+For each item:
 
-#### Multi Line
+1. Clear the console, reload, and confirm the entry is still there.
+   Earlier fixes often clear later entries; a resolved item is marked
+   done with a note saying which fix cleared it.
+2. Find the cause in the code and fix it. Fix the cause, not the
+   symptom: silencing a warning or wrapping a throw is not a fix unless
+   the user asks for exactly that.
+3. Clear the console, reload, and read it again. The entry must be gone
+   and no new entry may have appeared. If the entry persists, keep
+   working on it; if a new one appeared, it joins the list as a new
+   item and this fix is not committed until it is understood.
+4. Commit the fix on its own. Follow the repo's commit conventions
+   (CLAUDE.md, AGENTS.md, recent history). Absent a convention, use
+   Conventional Commits with the area touched as scope and a summary of
+   the fix, not of the error:
 
-```
-fix(<logging_level>): <error_message>
+   ```
+   fix(<area>): <what changed>
 
-<optional body>
-```
+   Clears the console <level>: <message, trimmed to identify it>
+   ```
 
-#### Values
+5. Mark the item done and move to the next.
 
-- **`<logging_level>`** — the logging level from the console, in lowercase
-- **`<error_message>`** — a literal copy of the error message from the console; start with a lowercase character (exceptions for acronyms, case-sensitive types, or other words that would appear strange lowercased); do not end with a period
-- **`<truncated_error_message>`** — enough of the original error to be identifiable in the console
-- **`<optional body>`** — for complex fixes, include a description of the fix
+Don't batch fixes into one commit, and don't commit while an item's
+verification is pending.
 
-#### Exceptions
+## Finish
 
-**PropType change:**
-```
-fix(error): changed PropType `{prop_name}` from `{original_type}` to `{new_type}`
-```
-
-**Excessively long error messages:**
-```
-fix(<logging_level>): <truncated_error_message>
-```
-
-## 2. Process Each Error
-
-For each error/todo item:
-
-1. Ask the user to reload the page and wait for confirmation before proceeding
-2. Confirm the error is still present in the console (skip if resolved by a previous commit)
-3. Apply the fix
-4. Ask the user to reload the page and wait for confirmation before proceeding
-5. Verify the error is gone in the console (repeat steps 3-4 if it persists)
-6. Commit changes using the proposed message
-7. Mark the todo as completed and move to the next `in_progress` item
-
-## 3. Key Rules
-
-- One error = one commit
-- Console verification before and after each fix prevents wasted effort on stale errors
-- User confirmation at reload steps prevents accidental commits
+Reload one last time and read the console. Report what was fixed, with
+one commit hash each, anything left and why (out of scope, needs a
+decision, couldn't reproduce), and any entry that appeared during the
+work.
