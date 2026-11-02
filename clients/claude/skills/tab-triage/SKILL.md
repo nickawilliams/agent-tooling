@@ -1,7 +1,7 @@
 ---
 name: tab-triage
-description: Sift through and triage open Safari tabs across all windows when the user is feeling overwhelmed. Each tab is routed to one of three destinations — archive to GoodLinks, close, or leave open. Use when the user says their tabs are overwhelming, asks to clean/triage/organize Safari tabs, mentions tab clutter or "too many tabs," or invokes /tab-triage.
-user-invocable: true
+description: Triage open Safari tabs across all windows. Each tab is archived to GoodLinks, closed, or left open; pinned tabs are never touched.
+disable-model-invocation: true
 ---
 
 # Tab Triage
@@ -10,7 +10,6 @@ Goal: drop the user's tab count meaningfully without losing anything they care
 about, in one session.
 
 This is a flat router: `[open tabs] → [GoodLinks | Close | Leave open]`.
-Nothing more for v1. The user wants to iterate from the smallest useful version.
 
 ## The three destinations
 
@@ -228,5 +227,3 @@ Tight summary at the end:
 - Private browsing tabs are not in `SafariTabs.db` and are out of scope.
 - GoodLinks lives at `/Applications/GoodLinks.app`. If it's missing, stop and
   tell the user rather than picking a different archive destination silently.
-- Auto-tagging memory and other features can come once we see the skill in
-  real use.
