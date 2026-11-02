@@ -154,8 +154,9 @@ adds each entry the config dir's `settings.json` lacks, and removes
 entries it owns that no item wants any more; `doctor` reports both. An
 entry is owned when one of its commands names a path under
 `<config_dir>/hooks/`. Nothing else in the file is touched; `jq` rewrites
-it and keeps its two-space layout. Permission allowlists can use the same
-merge when they arrive.
+it and keeps its two-space layout. The permission allowlist stays out of
+the repo: it grows with every approval, so a fragment would be a second
+copy to keep in step by hand, and bypass mode makes it inert anyway.
 
 **Plugin or standalone.** Ease of install doesn't decide it: both install
 in one step from the same single copy. Make an item part of a plugin when
