@@ -1010,7 +1010,7 @@ session. Do not poll from the foreground or schedule short wakeups instead.
 ```bash
 reviewed=<pr.head_sha>
 while (( SECONDS < 86400 )); do
-  sleep 300
+  sleep 120
   read -r state head < <(gh pr view <n> --json state,headRefOid \
     --jq '"\(.state) \(.headRefOid)"') || continue
   if [[ "${state}" != "OPEN" ]]; then
