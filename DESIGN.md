@@ -291,6 +291,21 @@ Two things read this repo, and the layout has to serve both:
     user settings don't load. Skills load from the cloned repo's
     `.claude/skills/` and from skills enabled on the claude.ai account.
   - claude.ai connectors such as Slack are available.
+  - Plugins (checked 2026-11-04 against cloud-environments.md,
+    settings.md, and plugins/loading.md): a cloud session installs no
+    plugins. A repo's `enabledPlugins` and `extraKnownMarketplaces` are
+    read but not acted on, since adding a marketplace needs the trust
+    dialog cloud never shows, and user settings aren't read at all. The
+    only candidate is a custom environment's setup script (runs as root
+    before Claude Code, snapshotted for about seven days) running
+    `claude plugin marketplace add` and `install`. Untested there:
+    whether `claude` is callable, whether root's plugin state is what the
+    session reads, and whether the GitHub proxy allows cloning a repo
+    not attached to the session (archive downloads of unattached repos
+    get 403, even public ones). Repo-settings hooks run only in
+    single-repo sessions outside project threads; `CLAUDE_CODE_REMOTE`
+    is `true` in cloud hooks. Deliberately not pursued for `auto-title`:
+    modest value, undocumented footing.
 
 Working proposal (open): a routine's prompt says "read
 `clients/claude/plugins/<name>/skills/<skill>/SKILL.md` and follow it"
