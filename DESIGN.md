@@ -311,11 +311,13 @@ Two things read this repo, and the layout has to serve both:
     repos/<owner>/<repo>/…` works once the repo is attached. The web
     UI's "Add repository" sends the session a prompt to clone a second
     copy; it doesn't attach the existing clone.
-  - Hook-set session titles don't reach the cloud UI. A
-    `UserPromptSubmit` hook's `sessionTitle` does update the title inside
-    Claude Code (a later hook payload carries it as `session_title`),
-    but the claude.ai session name only follows `/rename` and the
-    server's own naming. So `auto-title` can't name cloud sessions; see
+  - Hook-set session titles don't reach the claude.ai session name. A
+    `UserPromptSubmit` hook's `sessionTitle` does set the title in the
+    cloud session itself: a later hook payload carries it as
+    `session_title`, and `claude --teleport` of that session shows it in
+    the terminal. Only the name in the claude.ai sidebar ignores it,
+    following `/rename` and the server's own naming alone. So
+    `auto-title` can't name cloud sessions where you look for them; see
     its section. Hooks added to `~/.claude/settings.json` mid-session
     are hot-loaded and fire on the next prompt.
 
@@ -623,9 +625,10 @@ for rules that aren't skills; none exist.
 - Only `skills/*/` is scanned. Skills a `plugin.json` declares at custom
   paths are missed; extend the scanner when one appears.
 - Cloud sessions: the plugin installs and its hooks run there (see
-  [Consumers](#consumers)), but the title it sets never reaches the
-  claude.ai session name, which follows only `/rename`. Tested
-  2026-11-04; nothing a plugin does can change it. The `pr` handler
+  [Consumers](#consumers)), and the title it sets is kept by the
+  session and shows after `claude --teleport`, but the claude.ai
+  sidebar name follows only `/rename`. Tested 2026-11-04; nothing a
+  plugin does can change it. The `pr` handler
   still degrades sanely there: the cloud clone has no remote, so it
   prints `review: #<n>` when the prompt carries a number and declines
   otherwise.
