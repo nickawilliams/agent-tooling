@@ -32,12 +32,17 @@ prompt="$(jq -r '.prompt // empty' <<< "${payload}")"
 
 # Owner and repo from the remote, in any of the forms git accepts:
 # https://github.com/o/r(.git), git@github.com:o/r(.git), ssh://git@github.com/o/r.
-remote="$(git remote get-url origin 2>/dev/null)" || exit 0
+# A cloud session's clone is built from a seed bundle and has no remote
+# at all, so both stay empty there and the title degrades to the number.
+owner=""
+repo=""
+remote="$(git remote get-url origin 2>/dev/null)" || remote=""
 remote="${remote%.git}"
 remote="${remote%/}"
-[[ "${remote}" =~ [:/]([^/:]+)/([^/]+)$ ]] || exit 0
-owner="${BASH_REMATCH[1]}"
-repo="${BASH_REMATCH[2]}"
+if [[ "${remote}" =~ [:/]([^/:]+)/([^/]+)$ ]]; then
+  owner="${BASH_REMATCH[1]}"
+  repo="${BASH_REMATCH[2]}"
+fi
 
 # The number is the first operand, as the skill's argument-hint has it,
 # with or without a leading '#'. Anything else, such as a flag, means
@@ -48,6 +53,9 @@ if [[ "${prompt}" =~ ^/[^[:space:]]+[[:space:]]+#?([0-9]+)([[:space:]]|$) ]]; th
 fi
 
 if [[ -z "${number}" ]]; then
+  # Finding the branch's PR needs the repo; with no remote there is
+  # nothing to ask.
+  [[ -n "${repo}" ]] || exit 0
   command -v gh >/dev/null 2>&1 || exit 0
   branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" || exit 0
   [[ -n "${branch}" && "${branch}" != "HEAD" ]] || exit 0
@@ -56,4 +64,8 @@ if [[ -z "${number}" ]]; then
   [[ -n "${number}" ]] || exit 0
 fi
 
-printf 'review: %s #%s\n' "${repo}" "${number}"
+if [[ -n "${repo}" ]]; then
+  printf 'review: %s #%s\n' "${repo}" "${number}"
+else
+  printf 'review: #%s\n' "${number}"
+fi

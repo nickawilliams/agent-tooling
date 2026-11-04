@@ -21,7 +21,7 @@ agent-tooling/
 │       ├── hooks/          #   linked hooks, each with a settings fragment merged into the config dir
 │       ├── output-styles/  #   linked output styles
 │       ├── plugins/        #   plugins, installed from the marketplace
-│       ├── scripts/        #   the install script and the VS Code process wrapper
+│       ├── scripts/        #   the install script, the cloud setup script, and the VS Code process wrapper
 │       └── skills/         #   linked skills
 ├── AGENTS.md               # guidelines for agents working in this repo
 ├── DESIGN.md               # master plan
@@ -109,7 +109,14 @@ or whatever `CLAUDE_CONFIG_DIR` points at).
    A config dir opts out of an item with a `.agent-tooling-ignore` file,
    one `kind/name` per line, such as `skills/make-it-so`.
 
-4. If a project's `.envrc` sets `CLAUDE_CONFIG_DIR`, point the VS Code
+4. For cloud sessions, add a cloud environment at claude.ai/code with
+   `clients/claude/scripts/cloud-setup` as its setup script, and pick it
+   with `/remote-env` so `claude --cloud` uses it. The script installs
+   the marketplace and the `auto-title` and `pr` plugins on the
+   session's VM. Session titles don't follow `auto-title` there; the
+   claude.ai name only changes with `/rename`.
+
+5. If a project's `.envrc` sets `CLAUDE_CONFIG_DIR`, point the VS Code
    extension's `claudeCode.claudeProcessWrapper` setting at
    `clients/claude/scripts/claude-vscode-wrapper`. It runs the CLI through
    `direnv exec` for the workspace, so VS Code and the terminal use the

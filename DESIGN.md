@@ -291,21 +291,33 @@ Two things read this repo, and the layout has to serve both:
     user settings don't load. Skills load from the cloned repo's
     `.claude/skills/` and from skills enabled on the claude.ai account.
   - claude.ai connectors such as Slack are available.
-  - Plugins (checked 2026-11-04 against cloud-environments.md,
-    settings.md, and plugins/loading.md): a cloud session installs no
-    plugins. A repo's `enabledPlugins` and `extraKnownMarketplaces` are
-    read but not acted on, since adding a marketplace needs the trust
-    dialog cloud never shows, and user settings aren't read at all. The
-    only candidate is a custom environment's setup script (runs as root
-    before Claude Code, snapshotted for about seven days) running
-    `claude plugin marketplace add` and `install`. Untested there:
-    whether `claude` is callable, whether root's plugin state is what the
-    session reads, and whether the GitHub proxy allows cloning a repo
-    not attached to the session (archive downloads of unattached repos
-    get 403, even public ones). Repo-settings hooks run only in
-    single-repo sessions outside project threads; `CLAUDE_CODE_REMOTE`
-    is `true` in cloud hooks. Deliberately not pursued for `auto-title`:
-    modest value, undocumented footing.
+  - Plugins: a cloud session installs none on its own. A repo's
+    `enabledPlugins` and `extraKnownMarketplaces` are read but not acted
+    on, since adding a marketplace needs the trust dialog cloud never
+    shows, and user settings aren't read at all. What works, tested
+    2026-11-04 in three sessions on an Anthropic-hosted environment: a
+    custom environment's setup script running
+    `clients/claude/scripts/cloud-setup`. The script runs as root with
+    `HOME=/root`, `claude` on `PATH`, and `CLAUDE_CODE_REMOTE=true`;
+    the session runs as the same user, so what the script installs
+    under `~/.claude/plugins` is what the session loads, hooks included.
+    `git clone` of a public repo works through the proxy whether or not
+    the repo is attached (the documented 403 covers API and archive
+    requests). The install is frozen in the environment snapshot for up
+    to seven days; editing the setup script forces a rebuild.
+  - The cloud clone is built from a seed bundle and has **no remote**,
+    so `git remote get-url origin` is empty and anything that starts
+    from `gh pr view` has nothing to resolve against. `gh api
+    repos/<owner>/<repo>/…` works once the repo is attached. The web
+    UI's "Add repository" sends the session a prompt to clone a second
+    copy; it doesn't attach the existing clone.
+  - Hook-set session titles don't reach the cloud UI. A
+    `UserPromptSubmit` hook's `sessionTitle` does update the title inside
+    Claude Code (a later hook payload carries it as `session_title`),
+    but the claude.ai session name only follows `/rename` and the
+    server's own naming. So `auto-title` can't name cloud sessions; see
+    its section. Hooks added to `~/.claude/settings.json` mid-session
+    are hot-loaded and fire on the next prompt.
 
 Working proposal (open): a routine's prompt says "read
 `clients/claude/plugins/<name>/skills/<skill>/SKILL.md` and follow it"
@@ -610,6 +622,13 @@ for rules that aren't skills; none exist.
   plugin skill it forwards to, deliberately not built yet.
 - Only `skills/*/` is scanned. Skills a `plugin.json` declares at custom
   paths are missed; extend the scanner when one appears.
+- Cloud sessions: the plugin installs and its hooks run there (see
+  [Consumers](#consumers)), but the title it sets never reaches the
+  claude.ai session name, which follows only `/rename`. Tested
+  2026-11-04; nothing a plugin does can change it. The `pr` handler
+  still degrades sanely there: the cloud clone has no remote, so it
+  prints `review: #<n>` when the prompt carries a number and declines
+  otherwise.
 
 **Mechanics.** One script, `auto-title`, with hook modes `index`
 (`SessionStart`, every source) and `prompt` (`UserPromptSubmit`), and a

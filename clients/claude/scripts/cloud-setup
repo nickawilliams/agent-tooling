@@ -1,0 +1,29 @@
+#!/bin/bash
+
+#?/name     cloud-setup — Setup script for a Claude Code cloud environment
+#?/version  1.0.0
+#?/synopsis Paste into the environment's Setup script field at claude.ai/code
+#?/description
+ # Installs this marketplace and the plugins cloud sessions use, so a
+ # session started in the environment has them loaded. Not run on a
+ # workstation: the cloud runs it as root, before Claude Code launches,
+ # the first time a session starts in the environment, then snapshots
+ # the filesystem and skips it until the script changes or the snapshot
+ # expires (about seven days).
+ #
+ # The marketplace is added from GitHub rather than from a clone so the
+ # plugins aren't frozen at the snapshot: Claude Code auto-updates
+ # installed plugins in the background after the session's first
+ # message. The session's `${CLAUDE_CODE_REMOTE}` is `true` while this
+ # runs.
+ #
+ # Every step tolerates failure, because a non-zero exit stops the
+ # session from starting at all. Plain bash, no module-sh: nothing from
+ # this machine is on the cloud VM.
+ ##
+
+claude plugin marketplace add nickawilliams/agent-tooling || true
+claude plugin install auto-title@nickawilliams || true
+claude plugin install pr@nickawilliams || true
+
+exit 0
