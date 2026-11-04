@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+
+#?/name     auto-title — Session title for a pull request review
+#?/version  1.0.0
+#?/synopsis auto-title < hook-payload.json
+#?/description
+ # Handler for the auto-title plugin, which runs it when a prompt
+ # invokes /pr:review or bare /review. Reads the UserPromptSubmit
+ # payload, takes the PR number from the prompt or, with none given,
+ # from the current branch, and prints `review: <repo> #<number>`. The
+ # repo comes from the PR's URL, so it is the base repository even when
+ # the PR is from a fork. Prints nothing when there is no PR to name,
+ # which auto-title treats as declining.
+ #
+ # auto-title runs it in the session's working directory, so `gh`
+ # resolves the repo the way the review itself does. Needs bash, jq, and
+ # gh. No module-sh, as with every script a hook runs here.
+ ##
+
+set -uo pipefail
+
+payload="$(cat)"
+
+command -v jq >/dev/null 2>&1 || exit 0
+command -v gh >/dev/null 2>&1 || exit 0
+
+prompt="$(jq -r '.prompt // empty' <<< "${payload}")"
+
+# The number is the first operand, as the skill's argument-hint has it,
+# with or without a leading '#'. Anything else, such as a flag, means
+# "the current branch's PR".
+number=""
+if [[ "${prompt}" =~ ^/[^[:space:]]+[[:space:]]+#?([0-9]+)([[:space:]]|$) ]]; then
+  number="${BASH_REMATCH[1]}"
+fi
+
+json="$(gh pr view ${number:+"${number}"} --json number,url 2>/dev/null)" \
+  || exit 0
+
+number="$(jq -r '.number // empty' <<< "${json}")"
+url="$(jq -r '.url // empty' <<< "${json}")"
+[[ -n "${number}" && "${url}" =~ /([^/]+)/pull/[0-9]+$ ]] || exit 0
+
+printf 'review: %s #%s\n' "${BASH_REMATCH[1]}" "${number}"

@@ -1,0 +1,406 @@
+#!/usr/bin/env bash
+
+#?/name     auto-title — Name a session after the skill that starts it
+#?/version  1.0.0
+#?/synopsis auto-title {index|prompt|status}
+#?/description
+ # Hook script for the auto-title plugin. `index` runs at SessionStart:
+ # it asks Claude Code which plugins are enabled here, scans each for
+ # skills that ship an `auto-title` handler beside their SKILL.md, and
+ # writes the resulting rules to a per-session index under
+ # ${CLAUDE_PLUGIN_DATA}. `prompt` runs at UserPromptSubmit: it matches
+ # the typed prompt against that index and, on a hit, runs the handler
+ # and sets the session title from its output. `status` prints the
+ # newest index for a human.
+ #
+ # A handler is the whole registration. It gets the UserPromptSubmit
+ # payload on stdin, runs in the session's working directory, and prints
+ # a title or nothing. Empty output or a non-zero exit declines, and the
+ # next matching rule is tried. The two spellings a skill answers to,
+ # /<plugin>:<skill> and bare /<skill>, are derived here from the plugin
+ # and skill names, so a consumer never writes a pattern.
+ #
+ # Runs at every session start and every prompt, so it must never block
+ # either: every mode exits 0, and problems are reported once through a
+ # `systemMessage` rather than by failing. Needs bash, jq, and `claude`
+ # on PATH; the absence of either is one of the problems it reports.
+ # House shell conventions (module-sh) are deliberately not applied, for
+ # the same reason relay's hook script skips them: this runs under
+ # whatever environment launched Claude Code.
+ ##
+
+set -uo pipefail
+
+readonly HANDLER="auto-title"
+readonly INDEX_DAYS=7
+readonly TITLE_MAX=80
+
+#@/private
+ # Emit a systemMessage hook response.
+ #
+ # Builds the JSON by hand so it still works when jq is what's missing.
+ #
+ # @operand <text>         Message text
+ #
+ # @stdout                 Hook JSON
+ ##
+auto_title::_message() {
+  local s="${1}"
+
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  printf '{"systemMessage":"%s"}\n' "${s}"
+}
+
+#@/private
+ # Resolve a directory to its physical path.
+ #
+ # @operand <dir>          Directory, possibly through symlinks
+ #
+ # @stdout                 Physical path, or nothing if it doesn't exist
+ ##
+auto_title::_real() {
+  ( cd "${1}" 2>/dev/null && pwd -P )
+}
+
+#@/private
+ # Read a single frontmatter field from a SKILL.md.
+ #
+ # Stops at the closing delimiter so body text can't shadow a field.
+ #
+ # @operand <file>         SKILL.md path
+ # @operand <key>          Frontmatter key
+ #
+ # @stdout                 Field value, unquoted; empty if absent
+ ##
+auto_title::_field() {
+  local file="${1}" key="${2}"
+  local line value delimiters=0
+
+  while IFS= read -r line; do
+    if [[ "${line}" == "---" ]]; then
+      (( ++delimiters >= 2 )) && break
+      continue
+    fi
+    if [[ "${line}" == "${key}:"* ]]; then
+      value="${line#"${key}:"}"
+      value="${value#"${value%%[![:space:]]*}"}"
+      value="${value%"${value##*[![:space:]]}"}"
+      value="${value#\"}"
+      value="${value%\"}"
+      printf '%s' "${value}"
+      return 0
+    fi
+  done < "${file}"
+}
+
+#@/private
+ # List a plugin's skill directories, one per line.
+ #
+ # Only `skills/*/` with a SKILL.md. Skills a plugin.json declares at
+ # custom paths are not seen; extend this when one appears.
+ #
+ # @operand <root>         Plugin directory
+ #
+ # @stdout                 One skill directory per line
+ ##
+auto_title::_skill_dirs() {
+  local root="${1}" dir
+
+  for dir in "${root}"/skills/*/; do
+    [[ -f "${dir}SKILL.md" ]] && printf '%s\n' "${dir%/}"
+  done
+  return 0
+}
+
+#@/private
+ # Emit one JSON rule per skill under a plugin that ships a handler.
+ #
+ # @operand <plugin>       Plugin name, from its manifest
+ # @operand <root>         Plugin directory
+ #
+ # @stdout                 One rule object per line, or nothing
+ ##
+auto_title::_rules() {
+  local plugin="${1}" root="${2}"
+  local dir skill
+
+  while IFS= read -r dir; do
+    [[ -n "${dir}" && -x "${dir}/${HANDLER}" ]] || continue
+    skill="$(auto_title::_field "${dir}/SKILL.md" name)"
+    skill="${skill:-$(basename "${dir}")}"
+    jq -nc --arg plugin "${plugin}" --arg skill "${skill}" \
+      --arg run "${dir}/${HANDLER}" \
+      '{plugin: $plugin, skill: $skill, run: $run, patterns: [
+         "^/\($plugin):\($skill)([[:space:]]|$)",
+         "^/\($skill)([[:space:]]|$)"]}'
+  done < <(auto_title::_skill_dirs "${root}")
+}
+
+#@/private
+ # Write a session's index file.
+ #
+ # @operand <path>         Index file
+ # @operand <session_id>   Session id
+ # @operand <cwd>          Session working directory
+ # @operand <plugins>      Count of enabled plugins scanned
+ # @operand <problems>     Problems, newline separated; empty if none
+ # @operand <rules>        Rule objects, one per line; empty if none
+ #
+ # @writes  <path>         The index
+ ##
+auto_title::_write_index() {
+  local path="${1}" session_id="${2}" cwd="${3}" plugins="${4}"
+  local problems="${5}" rules="${6}"
+  local problems_json rules_json
+
+  problems_json="$(printf '%s' "${problems}" | jq -R . | jq -s .)"
+  rules_json="$(printf '%s' "${rules}" | jq -s .)"
+
+  mkdir -p "$(dirname "${path}")" || return 1
+  jq -n \
+    --arg generated "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg session_id "${session_id}" \
+    --arg cwd "${cwd}" \
+    --argjson plugins "${plugins}" \
+    --argjson problems "${problems_json}" \
+    --argjson rules "${rules_json}" \
+    '{generated: $generated, session_id: $session_id, cwd: $cwd,
+      disabled: ($problems | length > 0), problems: $problems,
+      plugins: $plugins, rules: $rules}' > "${path}"
+}
+
+#@/subcommand index
+ # Build this session's index of title handlers.
+ #
+ # Enumerates plugins with `claude plugin list --json`, the documented
+ # route, rather than globbing the plugin cache, whose layout isn't
+ # documented as stable. The enumeration is still an assumption, so this
+ # plugin's own presence is the canary: its directory must be among the
+ # listed paths, and the scanner that finds every consumer's skills must
+ # find its own. Any failure disables titling for the session and says
+ # so once, prefixed DISABLED because systemMessage renders as a muted
+ # info line. Success is silent.
+ #
+ # @env     CLAUDE_PLUGIN_ROOT  This plugin's directory
+ # @env     CLAUDE_PLUGIN_DATA  Persistent data directory for the index
+ #
+ # @stdin                  SessionStart hook payload
+ #
+ # @writes  $CLAUDE_PLUGIN_DATA/sessions/<session_id>.json
+ #
+ # @stdout                 Hook JSON on a problem or an empty index
+ #
+ # @exit    0              Always, so a failure here never blocks a session
+ ##
+auto_title::index() {
+  local payload session_id cwd data_dir self_root self_real list
+  local id scope enabled project root real plugin dir
+  local seen="" found_self=0 self_ok=0 plugins=0 problems="" rules="" text
+
+  payload="$(cat)"
+  data_dir="${CLAUDE_PLUGIN_DATA:-}"
+  self_root="${CLAUDE_PLUGIN_ROOT:-}"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    auto_title::_message "auto-title: DISABLED — jq is not on PATH"
+    return 0
+  fi
+
+  session_id="$(jq -r '.session_id // empty' <<< "${payload}")"
+  cwd="$(jq -r '.cwd // empty' <<< "${payload}")"
+  cwd="$(auto_title::_real "${cwd:-${PWD}}")"
+
+  [[ -n "${data_dir}" ]] || problems+="CLAUDE_PLUGIN_DATA is unset"$'\n'
+  [[ -n "${self_root}" ]] || problems+="CLAUDE_PLUGIN_ROOT is unset"$'\n'
+  [[ -n "${session_id}" ]] || problems+="the payload has no session_id"$'\n'
+  command -v claude >/dev/null 2>&1 || problems+="claude is not on PATH"$'\n'
+
+  if [[ -z "${problems}" ]]; then
+    if ! list="$(claude plugin list --json 2>/dev/null)"; then
+      problems+="claude plugin list --json failed"$'\n'
+    elif ! jq -e 'type == "array" and all(.[];
+        has("id") and has("enabled") and has("installPath"))' \
+        <<< "${list}" >/dev/null 2>&1; then
+      problems+="claude plugin list --json returned an unexpected shape"$'\n'
+    fi
+  fi
+
+  if [[ -z "${problems}" ]]; then
+    self_real="$(auto_title::_real "${self_root}")"
+
+    # Keep what is enabled here: project and local installs only when
+    # the session is inside their project. `enabled` alone is not
+    # cwd-aware. A plugin installed at two scopes is listed twice. The
+    # fields are joined on a unit separator, not a tab: `read` treats a
+    # tab as whitespace and collapses the empty projectPath field.
+    while IFS=$'\x1f' read -r id scope enabled project root; do
+      [[ "${enabled}" == "true" ]] || continue
+      if [[ "${scope}" == "project" || "${scope}" == "local" ]]; then
+        project="$(auto_title::_real "${project}")"
+        [[ -n "${project}" ]] || continue
+        [[ "${cwd}" == "${project}" || "${cwd}" == "${project}"/* ]] \
+          || continue
+      fi
+      case " ${seen} " in *" ${id} "*) continue ;; esac
+      seen+=" ${id}"
+
+      real="$(auto_title::_real "${root}")"
+      [[ -n "${real}" ]] || continue
+      (( plugins++ ))
+      [[ "${real}" == "${self_real}" ]] && found_self=1
+
+      plugin="$(jq -r '.name // empty' "${real}/.claude-plugin/plugin.json" \
+        2>/dev/null)"
+      plugin="${plugin:-${id%%@*}}"
+      text="$(auto_title::_rules "${plugin}" "${real}")"
+      [[ -n "${text}" ]] && rules+="${text}"$'\n'
+    done < <(jq -r 'sort_by(.id) | .[] | [.id, .scope, (.enabled | tostring),
+      (.projectPath // ""), (.readFromFolder // .installPath)]
+      | join("\u001f")' <<< "${list}")
+
+    (( found_self )) || problems+="this plugin's directory is not among"
+    (( found_self )) || problems+=" the plugins Claude Code lists (running"
+    (( found_self )) || problems+=" via --plugin-dir?)"$'\n'
+
+    while IFS= read -r dir; do
+      [[ "${dir}" == */skills/${HANDLER} ]] && self_ok=1
+    done < <(auto_title::_skill_dirs "${self_root}")
+    (( self_ok )) || problems+="the skill scanner can't find this"
+    (( self_ok )) || problems+=" plugin's own skill"$'\n'
+  fi
+
+  problems="${problems%$'\n'}"
+  rules="${rules%$'\n'}"
+
+  if [[ -n "${data_dir}" && -n "${session_id}" ]]; then
+    auto_title::_write_index "${data_dir}/sessions/${session_id}.json" \
+      "${session_id}" "${cwd}" "${plugins}" "${problems}" "${rules}" \
+      || problems+=$'\n'"the index could not be written"
+    problems="${problems#$'\n'}"
+    find "${data_dir}/sessions" -name '*.json' -mtime +"${INDEX_DAYS}" \
+      -delete 2>/dev/null
+  fi
+
+  if [[ -n "${problems}" ]]; then
+    auto_title::_message "auto-title: DISABLED — ${problems//$'\n'/; }"
+  elif [[ -z "${rules}" ]]; then
+    auto_title::_message "auto-title: no skill registers a title handler among the ${plugins} plugins enabled here"
+  fi
+}
+
+#@/subcommand prompt
+ # Set the session title if this prompt invokes a registered skill.
+ #
+ # Reads only the session's index: no enumeration and no `claude` spawn
+ # per prompt. Exits at once when the payload carries `session_title`,
+ # which is present only once a title exists, so a /rename is never
+ # overwritten and a session is titled at most once.
+ #
+ # @env     CLAUDE_PLUGIN_DATA  Persistent data directory holding the index
+ #
+ # @stdin                  UserPromptSubmit hook payload
+ #
+ # @reads   $CLAUDE_PLUGIN_DATA/sessions/<session_id>.json
+ #
+ # @stdout                 Hook JSON setting the title, or nothing
+ #
+ # @exit    0              Always, so a failure here never blocks a prompt
+ ##
+auto_title::prompt() {
+  local payload session_title prompt session_id data_dir index cwd
+  local run joined pattern title
+  local -a patterns
+
+  command -v jq >/dev/null 2>&1 || return 0
+  payload="$(cat)"
+
+  session_title="$(jq -r '.session_title // empty' <<< "${payload}")"
+  [[ -z "${session_title}" ]] || return 0
+  prompt="$(jq -r '.prompt // empty' <<< "${payload}")"
+  [[ "${prompt}" == /* ]] || return 0
+
+  session_id="$(jq -r '.session_id // empty' <<< "${payload}")"
+  data_dir="${CLAUDE_PLUGIN_DATA:-}"
+  [[ -n "${data_dir}" && -n "${session_id}" ]] || return 0
+  index="${data_dir}/sessions/${session_id}.json"
+
+  if [[ ! -f "${index}" ]]; then
+    # Say so once, then leave a disabled index so later prompts stay quiet.
+    auto_title::_write_index "${index}" "${session_id}" "" 0 \
+      "no index was written at session start" ""
+    auto_title::_message "auto-title: DISABLED — no index for this session; the SessionStart hook did not run"
+    return 0
+  fi
+  jq -e '.disabled' "${index}" >/dev/null 2>&1 && return 0
+
+  cwd="$(jq -r '.cwd // empty' <<< "${payload}")"
+
+  while IFS=$'\x1f' read -r run joined; do
+    [[ -n "${run}" ]] || continue
+    IFS=$'\x1e' read -r -a patterns <<< "${joined}"
+    for pattern in "${patterns[@]}"; do
+      [[ "${prompt}" =~ ${pattern} ]] || continue
+
+      title="$(cd "${cwd:-.}" 2>/dev/null \
+        && printf '%s' "${payload}" | "${run}" 2>/dev/null)" || title=""
+      title="${title%%$'\n'*}"
+      title="${title#"${title%%[![:space:]]*}"}"
+      title="${title%"${title##*[![:space:]]}"}"
+      [[ -n "${title}" ]] || continue 2
+      (( ${#title} > TITLE_MAX )) && title="${title:0:TITLE_MAX-1}…"
+
+      jq -nc --arg title "${title}" '{hookSpecificOutput: {
+        hookEventName: "UserPromptSubmit", sessionTitle: $title}}'
+      return 0
+    done
+  done < <(jq -r '.rules[] | [.run, (.patterns | join("\u001e"))]
+    | join("\u001f")' "${index}")
+}
+
+#@/subcommand status
+ # Print the newest session index for a human.
+ #
+ # The hooks know their session id; a skill's shell does not, so this
+ # shows the most recently written index and says which session it is.
+ #
+ # @env     CLAUDE_PLUGIN_DATA  Persistent data directory holding the indexes
+ #
+ # @stdout                 Health, enabled plugin count, and the rules
+ #
+ # @exit    0              Always
+ ##
+auto_title::status() {
+  local data_dir="${CLAUDE_PLUGIN_DATA:-}" index
+
+  if [[ -z "${data_dir}" || ! -d "${data_dir}/sessions" ]]; then
+    printf 'No session index yet: the SessionStart hook has not run, or CLAUDE_PLUGIN_DATA is unset.\n'
+    return 0
+  fi
+  # shellcheck disable=SC2012  # names are session ids, never odd characters
+  index="$(ls -t "${data_dir}/sessions"/*.json 2>/dev/null | head -n 1)"
+  if [[ -z "${index}" ]]; then
+    printf 'No session index yet.\n'
+    return 0
+  fi
+
+  jq -r '
+    "Newest index: session \(.session_id // "?") in \(.cwd // "?"), written \(.generated // "?")",
+    "Plugins enabled here: \(.plugins // 0)",
+    (if .disabled then "DISABLED:", (.problems[] | "  - \(.)")
+     else "Healthy" end),
+    (if (.rules | length) == 0 then "No skill registers a title handler."
+     else "Handlers:", (.rules[] | "  /\(.plugin):\(.skill)  (also /\(.skill))  →  \(.run)")
+     end)' "${index}"
+}
+
+case "${1:-}" in
+  index)  auto_title::index  || true ;;
+  prompt) auto_title::prompt || true ;;
+  status) auto_title::status || true ;;
+  *)
+    printf 'Usage: auto-title {index|prompt|status}\n' >&2
+    exit 1
+    ;;
+esac

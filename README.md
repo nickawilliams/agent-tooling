@@ -37,6 +37,7 @@ other items are extracted into it only once a second client uses them
 
 | Plugin | Skills |
 |---|---|
+| `auto-title` | `/auto-title` |
 | `pr` | `/pr:review`, `/pr:address`, `/pr:sweep`, `/pr:automate` |
 | `relay` | `/dispatch`, `/pickup` |
 | `work` | `/standup`, `/15five`, `/state-the-nature`, `/ready-room`, `/make-it-so` |
@@ -61,6 +62,15 @@ and still waiting there. Its oh-my-posh status-line count is separate glue
 at `~/.config/oh-my-posh/claude-statusline.sh`, pointed at the script in
 this checkout.
 
+`auto-title` names a session after the skill that starts it. A skill in
+any plugin opts in with an executable named `auto-title` beside its
+`SKILL.md`; it gets the prompt payload on stdin and prints the title, or
+nothing to decline. `/pr:review` (or bare `/review`) ships one and titles
+the session `review: <repo> #<n>`. A name set with `/rename` is never
+overwritten. `/auto-title` shows the handlers found at the last session
+start and any problem that has disabled it. Needs `jq` and `claude` on
+`PATH`.
+
 ## Install
 
 On my machines the dotfiles installer runs these steps; they are listed
@@ -80,6 +90,7 @@ or whatever `CLAUDE_CONFIG_DIR` points at).
 2. Install the plugins:
 
    ```bash
+   claude plugin install auto-title@nickawilliams
    claude plugin install pr@nickawilliams
    claude plugin install relay@nickawilliams
    claude plugin install work@nickawilliams

@@ -1,0 +1,8 @@
+{
+  "name": "auto-title",
+  "description": "Name a session after the skill that starts it; any plugin's skill can opt in with a handler beside its SKILL.md",
+  "author": {
+    "name": "nickawilliams"
+  },
+  "repository": "https://github.com/nickawilliams/agent-tooling"
+}

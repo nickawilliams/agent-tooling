@@ -1,0 +1,27 @@
+{
+  "description": "At session start, indexes the skills of every enabled plugin that ship an auto-title handler. On each prompt that invokes one, runs the handler and sets the session title from its output. Silent unless something is wrong.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/auto-title\" index",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/auto-title\" prompt",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -267,6 +267,10 @@ Recheck before relying on them.
   people who install the plugin keep the built-in.
 - Skills that call each other, and routine prompts, use the full
   `/<plugin>:<skill>` name, which a later install can't take over.
+- A typed `/<skill>` is expanded inline with no tool call, so only a
+  `UserPromptSubmit` hook sees it, as the raw text. A skill that forwards
+  to another invokes it through the `Skill` tool, which fires
+  `PreToolUse` with `tool_input.skill` (tested 2026-11-04).
 
 ## Consumers
 
@@ -327,7 +331,10 @@ next to the thing it sets up:
 - **Plugin-private versus shared items.** Likely rule: an item lives inside
   its plugin unless it is portable or shared. A plugin that needs another
   plugin's skill can invoke it by full name and declare a `dependencies`
-  entry, so sharing doesn't force a build step.
+  entry, so sharing doesn't force a build step. The other direction, a
+  plugin offering a capability others opt into, has one instance: a file
+  convention the offering plugin discovers, with no dependency either way
+  (see [`auto-title`](#auto-title-plugin)).
 - **An `automate` convention.** Candidate: a plugin with automation exposes
   an `automate` skill with `install` (default), `doctor`, `off`, and
   `task`, the recurring entry point a routine invokes. Named for the idea
@@ -382,6 +389,9 @@ refactor, not a plain move.
   that proves too thin.
 - Belongs in `clients/claude/` because `review` names `AskUserQuestion`
   throughout.
+- `review` ships an `auto-title` handler (2026-11-04) that names the
+  session `review: <repo> #<n>`; see the [`auto-title`
+  plugin](#auto-title-plugin).
 
 Phases, each committed to `main` on its own and leaving things working:
 
@@ -549,3 +559,85 @@ an empty `CLAUDE.md`, so sessions there ran without the house rules.
   runs `clients/claude/scripts/install` against `~/.claude` and, when `claude` is
   present, adds the marketplace and installs the plugins. That is the
   rebuild path; the README steps are the same commands by hand.
+
+### `auto-title` plugin
+
+*Done 2026-11-04.* Names a session after the skill that starts it, so
+the session list reads `review: agent-tooling #123` instead of the first
+prompt. It began as a hook for `pr:review` alone and became a shared
+plugin: the hook has to run on every prompt and filter, so one hook any
+plugin can opt into costs the same as one serving `pr`, and `pr` stays
+unaware of how it was invoked.
+
+**Registration.** A skill opts in by shipping an executable named
+`auto-title` beside its `SKILL.md`. That file is the whole registration:
+auto-title derives the two spellings the skill answers to,
+`/<plugin>:<skill>` and bare `/<skill>`, from the plugin's manifest name
+and the skill's frontmatter name, so a consumer never writes a pattern
+and never restates the client's naming rule. The handler gets the
+`UserPromptSubmit` payload on stdin, runs in the session's cwd, and
+prints a title or nothing. Empty output or a non-zero exit declines, and
+the next matching rule is tried. Colocation won over a plugin-root
+`auto-title.json`: the rule is keyed on the skill, so its location can
+carry the key, and skill, rule, and handler move together as `relay`'s
+hook script does. A root file with explicit patterns can be added later
+for rules that aren't skills; none exist.
+
+- The bare spelling is derived, not resolved. auto-title can't tell
+  whether `/review` reached `pr:review`, the personal forwarder, or the
+  built-in `code-review` alias; the handler runs on all three and either
+  finds the branch's PR or declines. If that ever mis-titles a session,
+  the precise fix is an alias file in the personal skill naming the
+  plugin skill it forwards to, deliberately not built yet.
+- Only `skills/*/` is scanned. Skills a `plugin.json` declares at custom
+  paths are missed; extend the scanner when one appears.
+
+**Mechanics.** One script, `auto-title`, with hook modes `index`
+(`SessionStart`, every source) and `prompt` (`UserPromptSubmit`), and a
+`status` mode behind the `/auto-title` skill. `index` runs
+`claude plugin list --json`, the documented enumeration (about 0.6s,
+once per session), keeps entries enabled here (project and local scope
+only when the cwd is inside their `projectPath`; `enabled` alone is not
+cwd-aware), dedupes by id, reads each plugin from `readFromFolder` when
+present (in-place plugins, such as this marketplace from a checkout)
+else `installPath`, and writes the rules to
+`${CLAUDE_PLUGIN_DATA}/sessions/<session_id>.json`. Keying by session
+rather than one shared file keeps concurrent sessions in different
+projects from racing; files older than seven days are swept. `prompt`
+reads only that file: no enumeration and no `claude` spawn per prompt.
+It exits at once when the payload carries `session_title`, which is
+present only once a title exists, so a `/rename` is never overwritten
+and a session is titled at most once.
+
+**Failing loudly.** The cache layout and `installed_plugins.json` aren't
+documented as stable, so nothing globs them. The enumeration is still an
+assumption, and `index` checks it every session with the plugin's own
+presence as the canary: its `${CLAUDE_PLUGIN_ROOT}` must be one of the
+listed plugin paths, and the scanner that finds every consumer's skills
+must find its own. Any failure (`claude` or `jq` off `PATH`, the list
+command failing or changing shape, self not listed, as under
+`--plugin-dir`) is reported once through `systemMessage`, prefixed
+`auto-title: DISABLED`, and recorded in the index so `prompt` stays
+quiet. `systemMessage` renders muted, like an info line, so the prefix
+carries the severity. Success is silent; an index with no rules at all
+gets a one-line note.
+
+Reference facts, tested 2026-11-04 on Claude Code 2.1.308:
+
+- `hookSpecificOutput.sessionTitle` sets the title from `SessionStart`
+  and `UserPromptSubmit`, with the same effect as `/rename`. `PreToolUse`
+  can't, so the `Skill` tool call a forwarder makes is no use for
+  titling. `session_title` appears in those two payloads only once a
+  title exists, whether set by `-n`, `/rename`, or a hook.
+- Hooks inherit the launching shell's `PATH` and get
+  `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA` as environment
+  variables, not only as substitutions in the command string.
+- `claude plugin list --json` works from inside a hook and omits
+  `--plugin-dir` plugins. Project-scope entries carry `projectPath`;
+  `projectEnabled` says whether the cwd's project enables the plugin,
+  not whether it is enabled at all.
+- A plugin loaded in place from a directory marketplace still has a
+  stale copy in the cache at `installPath`; `readFromFolder` is what
+  Claude Code reads.
+- `systemMessage` from `SessionStart` is shown in the TUI and persists,
+  styled as a muted info line.
