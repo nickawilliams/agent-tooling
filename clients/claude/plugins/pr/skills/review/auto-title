@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
 
 #?/name     auto-title — Session title for a pull request review
-#?/version  1.0.0
+#?/version  1.1.0
 #?/synopsis auto-title < hook-payload.json
 #?/description
  # Handler for the auto-title plugin, which runs it when a prompt
  # invokes /pr:review or bare /review. Reads the UserPromptSubmit
- # payload, takes the PR number from the prompt or, with none given,
- # from the current branch, and prints `review: <repo> #<number>`. The
- # repo comes from the PR's URL, so it is the base repository even when
- # the PR is from a fork. Prints nothing when there is no PR to name,
- # which auto-title treats as declining.
+ # payload and prints `review: <repo> #<number>`, or nothing when there
+ # is no PR to name, which auto-title treats as declining.
  #
- # auto-title runs it in the session's working directory, so `gh`
- # resolves the repo the way the review itself does. Needs bash, jq, and
- # gh. No module-sh, as with every script a hook runs here.
+ # The repo name comes from the `origin` remote, not from GitHub, so a
+ # prompt that carries the number needs no network at all. Only a prompt
+ # with no number asks GitHub which open PR the current branch has, and
+ # it does so over REST: in a cloud session the GitHub proxy rejects
+ # GraphQL, which `gh pr` is built on, so `gh pr view` would fail there.
+ #
+ # auto-title runs it in the session's working directory, so git and gh
+ # resolve the repo the way the review itself does. Needs bash, git,
+ # and jq; gh only for the no-number case. No module-sh, as with every
+ # script a hook runs here.
  ##
 
 set -uo pipefail
@@ -22,9 +26,18 @@ set -uo pipefail
 payload="$(cat)"
 
 command -v jq >/dev/null 2>&1 || exit 0
-command -v gh >/dev/null 2>&1 || exit 0
+command -v git >/dev/null 2>&1 || exit 0
 
 prompt="$(jq -r '.prompt // empty' <<< "${payload}")"
+
+# Owner and repo from the remote, in any of the forms git accepts:
+# https://github.com/o/r(.git), git@github.com:o/r(.git), ssh://git@github.com/o/r.
+remote="$(git remote get-url origin 2>/dev/null)" || exit 0
+remote="${remote%.git}"
+remote="${remote%/}"
+[[ "${remote}" =~ [:/]([^/:]+)/([^/]+)$ ]] || exit 0
+owner="${BASH_REMATCH[1]}"
+repo="${BASH_REMATCH[2]}"
 
 # The number is the first operand, as the skill's argument-hint has it,
 # with or without a leading '#'. Anything else, such as a flag, means
@@ -34,11 +47,13 @@ if [[ "${prompt}" =~ ^/[^[:space:]]+[[:space:]]+#?([0-9]+)([[:space:]]|$) ]]; th
   number="${BASH_REMATCH[1]}"
 fi
 
-json="$(gh pr view ${number:+"${number}"} --json number,url 2>/dev/null)" \
-  || exit 0
+if [[ -z "${number}" ]]; then
+  command -v gh >/dev/null 2>&1 || exit 0
+  branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" || exit 0
+  [[ -n "${branch}" && "${branch}" != "HEAD" ]] || exit 0
+  number="$(gh api "repos/${owner}/${repo}/pulls?state=open&head=${owner}:${branch}" \
+    --jq '.[0].number // empty' 2>/dev/null)" || exit 0
+  [[ -n "${number}" ]] || exit 0
+fi
 
-number="$(jq -r '.number // empty' <<< "${json}")"
-url="$(jq -r '.url // empty' <<< "${json}")"
-[[ -n "${number}" && "${url}" =~ /([^/]+)/pull/[0-9]+$ ]] || exit 0
-
-printf 'review: %s #%s\n' "${BASH_REMATCH[1]}" "${number}"
+printf 'review: %s #%s\n' "${repo}" "${number}"

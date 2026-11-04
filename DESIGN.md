@@ -406,7 +406,11 @@ refactor, not a plain move.
   throughout.
 - `review` ships an `auto-title` handler (2026-11-04) that names the
   session `review: <repo> #<n>`; see the [`auto-title`
-  plugin](#auto-title-plugin).
+  plugin](#auto-title-plugin). The repo comes from the `origin` remote
+  and the number from the prompt, so the usual case needs no network;
+  only a prompt with no number asks GitHub for the branch's PR, over
+  REST, because the cloud GitHub proxy rejects GraphQL and with it
+  `gh pr view`.
 
 Phases, each committed to `main` on its own and leaving things working:
 
