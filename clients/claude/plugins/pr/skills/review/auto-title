@@ -1,27 +1,63 @@
 #!/usr/bin/env bash
 
 #?/name     auto-title — Session title for a pull request review
-#?/version  1.1.0
+#?/version  2.0.0
 #?/synopsis auto-title < hook-payload.json
 #?/description
  # Handler for the auto-title plugin, which runs it when a prompt
  # invokes /pr:review or bare /review. Reads the UserPromptSubmit
- # payload and prints `review: <repo> #<number>`, or nothing when there
- # is no PR to name, which auto-title treats as declining.
+ # payload and prints `<issue> review <repo>#<number>`, or nothing when
+ # there is no PR to name, which auto-title treats as declining.
  #
- # The repo name comes from the `origin` remote, not from GitHub, so a
- # prompt that carries the number needs no network at all. Only a prompt
- # with no number asks GitHub which open PR the current branch has, and
- # it does so over REST: in a cloud session the GitHub proxy rejects
- # GraphQL, which `gh pr` is built on, so `gh pr view` would fail there.
+ # The issue leads so that every session for one piece of work shares a
+ # prefix, across repos and across skills. It comes from the first of:
+ # an explicit `--issue=<key>` in the prompt, a key in the PR's title, a
+ # key in the PR's branch name. With none, the title drops the issue and
+ # keeps its order: `review <repo>#<number>`.
+ #
+ # The repo name comes from the `origin` remote and the number from the
+ # prompt, so a prompt carrying both a number and `--issue` needs no
+ # network. Otherwise one REST call fetches the PR's number, title, and
+ # branch. REST, because in a cloud session the GitHub proxy rejects
+ # GraphQL, which `gh pr` is built on. A cloud clone also has no remote,
+ # so there the title degrades to what the prompt alone gives.
  #
  # auto-title runs it in the session's working directory, so git and gh
  # resolve the repo the way the review itself does. Needs bash, git,
- # and jq; gh only for the no-number case. No module-sh, as with every
- # script a hook runs here.
+ # and jq; gh only for the lookup. No module-sh, as with every script a
+ # hook runs here.
  ##
 
 set -uo pipefail
+
+# An issue key as tooling writes it in titles and branch names: an
+# upper-case, letters-only project prefix, preceded by a non-word
+# character or the start of the string. No trailing boundary:
+# `EX-123_slug` holds a key.
+readonly KEY_PATTERN='(^|[^A-Za-z0-9])([A-Z]{2,10}-[0-9]+)'
+
+# Prefixes that look like project keys in a title and aren't.
+readonly NOT_KEYS=" UTF SHA ISO HTTP TLS SSL CVE RFC PEP MD UTC "
+
+#@/private
+ # Print the first issue key in a string, skipping known look-alikes.
+ #
+ # @operand <text>         PR title or branch name
+ #
+ # @stdout                 The key, or nothing
+ ##
+auto_title::_key() {
+  local text="${1}" key
+
+  while [[ "${text}" =~ ${KEY_PATTERN} ]]; do
+    key="${BASH_REMATCH[2]}"
+    if [[ "${NOT_KEYS}" != *" ${key%%-*} "* ]]; then
+      printf '%s' "${key}"
+      return 0
+    fi
+    text="${text#*"${key}"}"
+  done
+}
 
 payload="$(cat)"
 
@@ -33,7 +69,7 @@ prompt="$(jq -r '.prompt // empty' <<< "${payload}")"
 # Owner and repo from the remote, in any of the forms git accepts:
 # https://github.com/o/r(.git), git@github.com:o/r(.git), ssh://git@github.com/o/r.
 # A cloud session's clone is built from a seed bundle and has no remote
-# at all, so both stay empty there and the title degrades to the number.
+# at all, so both stay empty there.
 owner=""
 repo=""
 remote="$(git remote get-url origin 2>/dev/null)" || remote=""
@@ -52,20 +88,47 @@ if [[ "${prompt}" =~ ^/[^[:space:]]+[[:space:]]+#?([0-9]+)([[:space:]]|$) ]]; th
   number="${BASH_REMATCH[1]}"
 fi
 
-if [[ -z "${number}" ]]; then
-  # Finding the branch's PR needs the repo; with no remote there is
-  # nothing to ask.
-  [[ -n "${repo}" ]] || exit 0
-  command -v gh >/dev/null 2>&1 || exit 0
-  branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" || exit 0
-  [[ -n "${branch}" && "${branch}" != "HEAD" ]] || exit 0
-  number="$(gh api "repos/${owner}/${repo}/pulls?state=open&head=${owner}:${branch}" \
-    --jq '.[0].number // empty' 2>/dev/null)" || exit 0
-  [[ -n "${number}" ]] || exit 0
+# An explicit --issue wins: a Jira key in any case, or an issue number.
+issue=""
+if [[ "${prompt}" =~ (^|[[:space:]])--issue[=[:space:]]+([^[:space:]]+) ]]; then
+  value="${BASH_REMATCH[2]}"
+  if [[ "${value}" =~ ^[A-Za-z]{2,10}-[0-9]+$ ]]; then
+    issue="$(printf '%s' "${value}" | tr '[:lower:]' '[:upper:]')"
+  elif [[ "${value}" =~ ^#?([0-9]+)$ ]]; then
+    issue="#${BASH_REMATCH[1]}"
+  fi
 fi
 
-if [[ -n "${repo}" ]]; then
-  printf 'review: %s #%s\n' "${repo}" "${number}"
+# Ask GitHub only for what the prompt didn't supply, and only when
+# there is a repo to ask about.
+if [[ ( -z "${number}" || -z "${issue}" ) && -n "${repo}" ]] \
+    && command -v gh >/dev/null 2>&1; then
+  fields='[(.number | tostring), .title, .head.ref] | join("\u001f")'
+  if [[ -n "${number}" ]]; then
+    found="$(gh api "repos/${owner}/${repo}/pulls/${number}" \
+      --jq "${fields}" 2>/dev/null)" || found=""
+  else
+    branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" || branch=""
+    found=""
+    if [[ -n "${branch}" && "${branch}" != "HEAD" ]]; then
+      found="$(gh api \
+        "repos/${owner}/${repo}/pulls?state=open&head=${owner}:${branch}" \
+        --jq ".[0] // empty | ${fields}" 2>/dev/null)" || found=""
+    fi
+  fi
+
+  if [[ -n "${found}" ]]; then
+    IFS=$'\x1f' read -r found_number title ref <<< "${found}"
+    number="${number:-${found_number}}"
+    [[ -n "${issue}" ]] || issue="$(auto_title::_key "${title}")"
+    [[ -n "${issue}" ]] || issue="$(auto_title::_key "${ref}")"
+  fi
+fi
+
+[[ -n "${number}" ]] || exit 0
+
+if [[ -n "${issue}" ]]; then
+  printf '%s review %s#%s\n' "${issue}" "${repo}" "${number}"
 else
-  printf 'review: #%s\n' "${number}"
+  printf 'review %s#%s\n' "${repo}" "${number}"
 fi

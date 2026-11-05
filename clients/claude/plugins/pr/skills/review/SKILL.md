@@ -1,7 +1,7 @@
 ---
 name: review
 description: Review a pull request. Use when the user runs /pr:review, asks to review a PR, or wants feedback on changes in a pull request.
-argument-hint: "[pr-number] [--comments=<none|post|submit>] [--level=<severity>] [--watch=<off|on>] [--fresh]"
+argument-hint: "[pr-number] [--issue=<key>] [--comments=<none|post|submit>] [--level=<severity>] [--watch=<off|on>] [--fresh]"
 ---
 
 Review pull request $ARGUMENTS and produce a review in two stages: build a
@@ -107,6 +107,11 @@ name the flag that would have changed it.
 If a number is given in the arguments, use it. If not, try the current
 branch's PR (`gh pr view` with no number resolves it). If that fails, run
 `gh pr list`, show the open PRs, and ask which one.
+
+`--issue=<key>` names the issue the PR belongs to, such as `ABC-123`. It
+is not a decision and is never asked for: it exists so the session can be
+titled by issue when the PR's title and branch don't carry the key. It
+plays no part in resolving the PR or in the review itself.
 
 Then collect metadata and the diff:
 

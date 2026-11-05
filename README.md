@@ -65,11 +65,14 @@ this checkout.
 `auto-title` names a session after the skill that starts it. A skill in
 any plugin opts in with an executable named `auto-title` beside its
 `SKILL.md`; it gets the prompt payload on stdin and prints the title, or
-nothing to decline. `/pr:review` (or bare `/review`) ships one and titles
-the session `review: <repo> #<n>`; `/work:make-it-so` (or bare
-`/make-it-so`) ships one and titles it `<issue> Implementation`, taking
-the issue from the prompt or, failing that, the branch or worktree
-path. A name set with `/rename` is never
+nothing to decline. Titles lead with the issue, then a verb, so every
+session for one piece of work shares a prefix: `/work:make-it-so` (or
+bare `/make-it-so`) gives `ABC-123 implement`, taking the issue from the
+prompt or, failing that, the branch or worktree path; `/pr:review` (or
+bare `/review`) gives `ABC-123 review <repo>#<n>`, taking the issue from
+`--issue=<key>`, else the PR's title, else its branch name, and dropping
+it (`review <repo>#<n>`) when none carries one. A name set with `/rename`
+is never
 overwritten. `/auto-title` shows the handlers found at the last session
 start and any problem that has disabled it. Needs `jq` and `claude` on
 `PATH`.

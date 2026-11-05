@@ -6,9 +6,10 @@
 #?/description
  # Handler for the auto-title plugin, which runs it when a prompt
  # invokes /work:make-it-so or bare /make-it-so. Reads the
- # UserPromptSubmit payload and prints `<issue> Implementation`, or
- # nothing when no issue can be named, which auto-title treats as
- # declining.
+ # UserPromptSubmit payload and prints `<issue> implement`, or nothing
+ # when no issue can be named, which auto-title treats as declining.
+ # The issue leads and the verb follows, the grammar every handler in
+ # this repo uses, so sessions for one issue share a prefix.
  #
  # The issue is the prompt's first operand when that is a Jira key
  # (`ABC-123`, any case), a Jira URL ending in one, or a plain issue
@@ -86,4 +87,4 @@ if [[ -z "${issue}" ]]; then
   issue="${candidates}"
 fi
 
-printf '%s Implementation\n' "${issue}"
+printf '%s implement\n' "${issue}"

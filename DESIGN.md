@@ -419,12 +419,17 @@ refactor, not a plain move.
 - Belongs in `clients/claude/` because `review` names `AskUserQuestion`
   throughout.
 - `review` ships an `auto-title` handler (2026-11-04) that names the
-  session `review: <repo> #<n>`; see the [`auto-title`
-  plugin](#auto-title-plugin). The repo comes from the `origin` remote
-  and the number from the prompt, so the usual case needs no network;
-  only a prompt with no number asks GitHub for the branch's PR, over
-  REST, because the cloud GitHub proxy rejects GraphQL and with it
-  `gh pr view`.
+  session `<issue> review <repo>#<n>`; see the [`auto-title`
+  plugin](#auto-title-plugin). Nearly every PR sits under an issue, and
+  one issue can have PRs in several repos, so the issue leads and the
+  PR qualifies. The issue is the first of: `--issue=<key>` on the
+  prompt, an upper-case key in the PR's title, one in its branch name;
+  a short list of look-alikes (`UTF-8`, `CVE-…`) is skipped. `--issue`
+  is in the skill's argument hint for that purpose alone and plays no
+  part in the review. The repo comes from the `origin` remote and the
+  number from the prompt; one REST call fetches the title and branch
+  unless the prompt carried both a number and `--issue`. REST, because
+  the cloud GitHub proxy rejects GraphQL and with it `gh pr view`.
 
 Phases, each committed to `main` on its own and leaving things working:
 
@@ -523,7 +528,7 @@ collisions).
   baseline comes from Granola or the last Slack post and nothing is
   persisted.
 - `make-it-so` ships an `auto-title` handler (2026-11-04) that names the
-  session `<issue> Implementation`; see the [`auto-title`
+  session `<issue> implement`; see the [`auto-title`
   plugin](#auto-title-plugin). The issue is the prompt's first operand
   (a Jira key, a Jira URL, or a plain number, since the bare
   `/make-it-so` belongs to the GitHub skill in some config dirs),
@@ -604,7 +609,7 @@ an empty `CLAUDE.md`, so sessions there ran without the house rules.
 ### `auto-title` plugin
 
 *Done 2026-11-04.* Names a session after the skill that starts it, so
-the session list reads `review: agent-tooling #123` instead of the first
+the session list reads `ABC-123 review api#456` instead of the first
 prompt. It began as a hook for `pr:review` alone and became a shared
 plugin: the hook has to run on every prompt and filter, so one hook any
 plugin can opt into costs the same as one serving `pr`, and `pr` stays
@@ -638,8 +643,22 @@ for rules that aren't skills; none exist.
   sidebar name follows only `/rename`. Tested 2026-11-04; nothing a
   plugin does can change it. The `pr` handler
   still degrades sanely there: the cloud clone has no remote, so it
-  prints `review: #<n>` when the prompt carries a number and declines
-  otherwise.
+  prints `review #<n>` (led by the issue if `--issue` was passed) when
+  the prompt carries a number and declines otherwise.
+
+**Title grammar.** `<issue> <verb> [<qualifier>]`: `ABC-123 implement`,
+`ABC-123 review api#456`. The issue leads because the session list is
+opened to find a piece of work, not a kind of session; with it first,
+every session for an issue shares a prefix across its lifecycle and
+across the repos its PRs land in, and it is what survives a list that
+truncates. The verb is lowercase, from one small vocabulary
+(`implement`, `review`; later `plan`, `address`), not the skill's name
+and not a noun. A qualifier follows only where one issue can have
+several sessions of the same kind, as reviews do, one per PR. When no
+issue is known the title drops it and keeps its order
+(`review api#456`) rather than promoting the qualifier, so the verb
+stays where the eye expects it. Each handler owns its own output;
+nothing enforces the grammar but this paragraph.
 
 **Mechanics.** One script, `auto-title`, with hook modes `index`
 (`SessionStart`, every source) and `prompt` (`UserPromptSubmit`), and a
