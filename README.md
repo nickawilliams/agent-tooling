@@ -66,7 +66,10 @@ this checkout.
 any plugin opts in with an executable named `auto-title` beside its
 `SKILL.md`; it gets the prompt payload on stdin and prints the title, or
 nothing to decline. `/pr:review` (or bare `/review`) ships one and titles
-the session `review: <repo> #<n>`. A name set with `/rename` is never
+the session `review: <repo> #<n>`; `/work:make-it-so` (or bare
+`/make-it-so`) ships one and titles it `<issue> Implementation`, taking
+the issue from the prompt or, failing that, the branch or worktree
+path. A name set with `/rename` is never
 overwritten. `/auto-title` shows the handlers found at the last session
 start and any problem that has disabled it. Needs `jq` and `claude` on
 `PATH`.

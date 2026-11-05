@@ -522,6 +522,14 @@ collisions).
 - Graphiti is optional: with no server configured, the reconciliation
   baseline comes from Granola or the last Slack post and nothing is
   persisted.
+- `make-it-so` ships an `auto-title` handler (2026-11-04) that names the
+  session `<issue> Implementation`; see the [`auto-title`
+  plugin](#auto-title-plugin). The issue is the prompt's first operand
+  (a Jira key, a Jira URL, or a plain number, since the bare
+  `/make-it-so` belongs to the GitHub skill in some config dirs),
+  else the one key found in the branch name or worktree path. Unlike
+  the skill, it doesn't ask Jira to settle several candidates; it
+  declines.
 - The three Jira lifecycle skills moved in on 2026-11-02 and call each
   other by full name (`/work:ready-room`, `work:state-the-nature`), so a
   later install can't take the names over. They drive the `foreman` CLI,

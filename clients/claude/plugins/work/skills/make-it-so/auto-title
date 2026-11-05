@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+
+#?/name     auto-title — Session title for an issue implementation
+#?/version  1.0.0
+#?/synopsis auto-title < hook-payload.json
+#?/description
+ # Handler for the auto-title plugin, which runs it when a prompt
+ # invokes /work:make-it-so or bare /make-it-so. Reads the
+ # UserPromptSubmit payload and prints `<issue> Implementation`, or
+ # nothing when no issue can be named, which auto-title treats as
+ # declining.
+ #
+ # The issue is the prompt's first operand when that is a Jira key
+ # (`ABC-123`, any case), a Jira URL ending in one, or a plain issue
+ # number, which is what the bare /make-it-so takes where a GitHub
+ # flavored skill owns that name. With no such operand it looks where
+ # the skill itself looks, the current branch and the last components
+ # of the working directory, and uses a key only when exactly one turns
+ # up: the skill settles ambiguity by asking Jira, which a title isn't
+ # worth a network call for.
+ #
+ # auto-title runs it in the session's working directory. Needs bash
+ # and jq; git only for the branch name. No module-sh, as with every
+ # script a hook runs here.
+ ##
+
+set -uo pipefail
+
+# A Jira key with a letters-only project prefix, which keeps hex path
+# segments from reading as keys, preceded by a non-word character or
+# the start of the string. No trailing boundary: `EX-123_slug` is a key.
+readonly KEY_PATTERN='(^|[^A-Za-z0-9])([A-Za-z]{2,10}-[0-9]+)'
+
+#@/private
+ # Print every Jira key found in a string, upper-cased, one per line.
+ #
+ # @operand <text>         Text to scan
+ #
+ # @stdout                 Keys in order of appearance, possibly repeated
+ ##
+auto_title::_keys() {
+  local text="${1}"
+
+  while [[ "${text}" =~ ${KEY_PATTERN} ]]; do
+    printf '%s\n' "${BASH_REMATCH[2]}" | tr '[:lower:]' '[:upper:]'
+    text="${text#*"${BASH_REMATCH[2]}"}"
+  done
+}
+
+payload="$(cat)"
+
+command -v jq >/dev/null 2>&1 || exit 0
+
+prompt="$(jq -r '.prompt // empty' <<< "${payload}")"
+
+# The first operand, if the prompt has one.
+operand=""
+if [[ "${prompt}" =~ ^/[^[:space:]]+[[:space:]]+([^[:space:]]+) ]]; then
+  operand="${BASH_REMATCH[1]}"
+fi
+
+issue=""
+if [[ "${operand}" =~ ^#?([0-9]+)$ ]]; then
+  issue="#${BASH_REMATCH[1]}"
+elif [[ "${operand}" =~ ^([A-Za-z]{2,10}-[0-9]+)$ ]] \
+    || [[ "${operand}" =~ /browse/([A-Za-z]{2,10}-[0-9]+) ]]; then
+  issue="$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:lower:]' '[:upper:]')"
+fi
+
+if [[ -z "${issue}" ]]; then
+  # Where the skill looks when no key is given: the branch, then the
+  # last four components of the working directory.
+  branch="$(git branch --show-current 2>/dev/null)" || branch=""
+  tail_path="$(pwd | tr '/' '\n' | tail -4 | tr '\n' '/')"
+
+  candidates=""
+  while IFS= read -r key; do
+    [[ -n "${key}" ]] || continue
+    case $'\n'"${candidates}" in *$'\n'"${key}"$'\n'*) continue ;; esac
+    candidates+="${key}"$'\n'
+  done < <(auto_title::_keys "${branch}"; auto_title::_keys "${tail_path}")
+  candidates="${candidates%$'\n'}"
+
+  # Exactly one distinct key, or nothing.
+  [[ -n "${candidates}" && "${candidates}" != *$'\n'* ]] || exit 0
+  issue="${candidates}"
+fi
+
+printf '%s Implementation\n' "${issue}"
