@@ -64,18 +64,23 @@ this checkout.
 
 `auto-title` names a session after the skill that starts it. A skill in
 any plugin opts in with an executable named `auto-title` beside its
-`SKILL.md`; it gets the prompt payload on stdin and prints the title, or
-nothing to decline. Titles lead with the issue, then a verb, so every
-session for one piece of work shares a prefix: `/work:make-it-so` (or
-bare `/make-it-so`) gives `ABC-123 implement`, taking the issue from the
-prompt or, failing that, the branch or worktree path; `/pr:review` (or
-bare `/review`) gives `ABC-123 review <repo>#<n>`, taking the issue from
-`--issue=<key>`, else the PR's title, else its branch name, and dropping
-it (`review <repo>#<n>`) when none carries one. A name set with `/rename`
-is never
-overwritten. `/auto-title` shows the handlers found at the last session
-start and any problem that has disabled it. Needs `jq` and `claude` on
-`PATH`.
+`SKILL.md`; it gets the prompt payload on stdin and prints the title's
+fields as JSON (or a finished title), or nothing to decline. Titles read
+`<issue> · <name> · <verb>`, so every session for one piece of work
+shares a prefix and says what the work is. `/work:state-the-nature`,
+`/work:ready-room`, and `/work:make-it-so` give
+`ABC-123 · timecard sync drops overtime · triage`, `… · plan`, and
+`… · implement`, taking the issue from the prompt or, failing that, the
+branch or worktree path, and the name from Jira when the directory is
+inside a foreman project, else from the branch or workspace slug.
+`/pr:review` (or bare `/review`) gives
+`ABC-123 · timecard sync drops overtime · review → <repo>#<n>`, taking
+the issue from `--issue=<key>`, else the PR's title, else its branch
+name, and the name from the PR's title. An unknown field is dropped
+(`dedupe vendor imports · plan`, `review → <repo>#<n>`). A name set with
+`/rename` is never overwritten. `/auto-title` shows the handlers found
+at the last session start and any problem that has disabled it. Needs
+`jq` and `claude` on `PATH`.
 
 ## Install
 

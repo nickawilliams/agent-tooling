@@ -418,18 +418,23 @@ refactor, not a plain move.
   that proves too thin.
 - Belongs in `clients/claude/` because `review` names `AskUserQuestion`
   throughout.
-- `review` ships an `auto-title` handler (2026-11-04) that names the
-  session `<issue> review <repo>#<n>`; see the [`auto-title`
+- `review` ships an `auto-title` handler (2026-11-04; title fields
+  since 2026-11-06) that names the session
+  `<issue> · <name> · review → <repo>#<n>`; see the [`auto-title`
   plugin](#auto-title-plugin). Nearly every PR sits under an issue, and
   one issue can have PRs in several repos, so the issue leads and the
-  PR qualifies. The issue is the first of: `--issue=<key>` on the
+  PR is the target. The issue is the first of: `--issue=<key>` on the
   prompt, an upper-case key in the PR's title, one in its branch name;
   a short list of look-alikes (`UTF-8`, `CVE-…`) is skipped. `--issue`
   is in the skill's argument hint for that purpose alone and plays no
-  part in the review. The repo comes from the `origin` remote and the
-  number from the prompt; one REST call fetches the title and branch
-  unless the prompt carried both a number and `--issue`. REST, because
-  the cloud GitHub proxy rejects GraphQL and with it `gh pr view`.
+  part in the review. The name is the PR's title. The PR is the first
+  operand: a number for the current checkout's repo, or
+  `<owner>/<repo>#<n>` or a PR URL from any directory, forms the skill
+  accepts too since 2026-11-06 (`pr:sweep` already passed the first).
+  A bare number takes the repo from the `origin` remote; no operand
+  means the current branch's open PR. One REST call fetches the
+  number, title, and branch. REST, because the cloud GitHub proxy
+  rejects GraphQL and with it `gh pr view`.
 
 Phases, each committed to `main` on its own and leaving things working:
 
@@ -527,14 +532,28 @@ collisions).
 - Graphiti is optional: with no server configured, the reconciliation
   baseline comes from Granola or the last Slack post and nothing is
   persisted.
-- `make-it-so` ships an `auto-title` handler (2026-11-04) that names the
-  session `<issue> implement`; see the [`auto-title`
-  plugin](#auto-title-plugin). The issue is the prompt's first operand
-  (a Jira key, a Jira URL, or a plain number, since the bare
-  `/make-it-so` belongs to the GitHub skill in some config dirs),
-  else the one key found in the branch name or worktree path. Unlike
-  the skill, it doesn't ask Jira to settle several candidates; it
-  declines.
+- The three Jira lifecycle skills ship `auto-title` handlers
+  (`make-it-so` 2026-11-04; all three, with names, 2026-11-06) that
+  name the session `<issue> · <name> · <verb>` with the verbs `triage`,
+  `plan`, and `implement`; see the [`auto-title`
+  plugin](#auto-title-plugin). They share `lib/auto-title.sh`, so each
+  handler supplies only its verb. The issue is the prompt's first
+  operand (a Jira key or URL; for `make-it-so` also a plain number,
+  since the bare `/make-it-so` belongs to the GitHub skill in some
+  config dirs), else the one key in the branch name, else the one key
+  in the last path components. Branch before path: directory names are
+  arbitrary, and one named for the branch adds nothing. The name is the
+  Jira summary when the cwd is inside a foreman project, fetched with
+  one REST call using the credentials `foreman config get` returns,
+  because a hook has no MCP; elsewhere it is the slug after the key in
+  the branch or workspace name. A key Jira reports unknown (`utf-8`) is
+  free text. With no issue, the name is the first five words of a
+  free-text argument; a URL, a file, or no argument declines. The
+  surroundings count whatever the argument is: `/state-the-nature the
+  export button 500s` inside the `EX-1337` workspace triages that
+  symptom on `EX-1337`, and `ready-room` and `state-the-nature` were
+  changed the same day to offer the key in that case, as they already
+  did with no argument.
 - The three Jira lifecycle skills moved in on 2026-11-02 and call each
   other by full name (`/work:ready-room`, `work:state-the-nature`), so a
   later install can't take the names over. They drive the `foreman` CLI,
@@ -622,8 +641,11 @@ auto-title derives the two spellings the skill answers to,
 and the skill's frontmatter name, so a consumer never writes a pattern
 and never restates the client's naming rule. The handler gets the
 `UserPromptSubmit` payload on stdin, runs in the session's cwd, and
-prints a title or nothing. Empty output or a non-zero exit declines, and
-the next matching rule is tried. Colocation won over a plugin-root
+prints one line or nothing: a JSON object of title fields (`issue`,
+`name`, `verb`, `target`), which the plugin assembles into the format
+below (since 2026-11-06), or any other text, used verbatim. Empty
+output or a non-zero exit declines, and the next matching rule is
+tried. Colocation won over a plugin-root
 `auto-title.json`: the rule is keyed on the skill, so its location can
 carry the key, and skill, rule, and handler move together as `relay`'s
 hook script does. A root file with explicit patterns can be added later
@@ -642,23 +664,44 @@ for rules that aren't skills; none exist.
   session and shows after `claude --teleport`, but the claude.ai
   sidebar name follows only `/rename`. Tested 2026-11-04; nothing a
   plugin does can change it. The `pr` handler
-  still degrades sanely there: the cloud clone has no remote, so it
-  prints `review #<n>` (led by the issue if `--issue` was passed) when
-  the prompt carries a number and declines otherwise.
+  still degrades sanely there: the cloud clone has no remote, so a bare
+  number yields `review → #<n>` (led by the issue if `--issue` was
+  passed), a `<owner>/<repo>#<n>` or URL operand still names the repo
+  and fetches the title, and no operand declines.
 
-**Title grammar.** `<issue> <verb> [<qualifier>]`: `ABC-123 implement`,
-`ABC-123 review api#456`. The issue leads because the session list is
-opened to find a piece of work, not a kind of session; with it first,
-every session for an issue shares a prefix across its lifecycle and
-across the repos its PRs land in, and it is what survives a list that
-truncates. The verb is lowercase, from one small vocabulary
-(`implement`, `review`; later `plan`, `address`), not the skill's name
-and not a noun. A qualifier follows only where one issue can have
-several sessions of the same kind, as reviews do, one per PR. When no
-issue is known the title drops it and keeps its order
-(`review api#456`) rather than promoting the qualifier, so the verb
-stays where the eye expects it. Each handler owns its own output;
-nothing enforces the grammar but this paragraph.
+**Title format.** `[<issue> · ]<name> · <verb>[ → <target>]`, settled
+2026-11-06 by iterating on a mock session list:
+
+```
+EX-1337 · timecard sync drops overtime · triage
+EX-1337 · timecard sync drops overtime · plan
+EX-1337 · timecard sync drops overtime · implement
+EX-1337 · timecard sync drops overtime · review → api#3442
+dedupe vendor imports · plan
+```
+
+The issue leads because the session list is opened to find a piece of
+work, not a kind of session; with it first, every session for an issue
+shares a prefix across its lifecycle and across the repos its PRs land
+in. The name follows because a bare key says nothing about the work: it
+is the issue's or PR's title as a lowercase slug with spaces, so the key
+stays the only uppercase landmark. The verb comes last, lowercase, from
+one small vocabulary (`triage`, `plan`, `implement`, `review`), not the
+skill's name and not a noun; a target follows it only where one issue
+can have several sessions of the same kind, as reviews do, one per PR.
+The middle dot separates fields because the hyphen already appears
+inside keys and slugs, and the arrow reads as "acting on". An unknown
+field is dropped with no placeholder and the order is kept
+(`review → api#456`, `dedupe vendor imports · plan`). The plugin
+assembles the title from the handler's fields, so the format lives in
+one place: it slugifies the name, strips a leading key or `Area ::`
+prefix from it, requires an issue, a name, or a target, and fits the
+title to 80 characters by shortening the name at a word boundary, never
+the issue, verb, or target. The earlier format was `<issue> <verb>
+[<qualifier>]` (2026-11-04). Two things the format doesn't attempt:
+sorting as text (keys and verbs don't, and `/resume` orders by
+recency), and a table view (a mod can't restyle the `/resume` picker; a
+separate pane could, parked).
 
 **Mechanics.** One script, `auto-title`, with hook modes `index`
 (`SessionStart`, every source) and `prompt` (`UserPromptSubmit`), and a
