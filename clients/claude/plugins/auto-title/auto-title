@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #?/name     auto-title — Name a session after the skill that starts it
-#?/version  1.2.0
+#?/version  1.3.0
 #?/synopsis auto-title {index|prompt|status}
 #?/description
  # Hook script for the auto-title plugin. `index` runs at SessionStart:
@@ -23,12 +23,13 @@
  # The line is either a JSON object of title fields, which this script
  # assembles into the house format, or any other text, used as the title
  # verbatim. The fields are `issue` (a key such as EX-1337), `name` (the
- # issue's or PR's title, slugified here), `verb` (what the session does,
- # lowercase), and `target` (what the verb acts on, such as api#456);
- # each may be absent. The format is `[<issue> · ]<name> · <verb>[ →
- # <target>]`, and a title needs an issue, a name, or a target. Keeping
- # assembly here means the format lives in one place and every handler
- # supplies only facts.
+ # issue's or PR's title, lowercased and slugified here) or `slug` (a
+ # branch or workspace slug, casing kept, separators to spaces), `verb`
+ # (what the session does, lowercase), and `target` (what the verb acts
+ # on, such as api#456); each may be absent. The format is `[<issue> ·
+ # ]<name> · <verb>[ → <target>]`, and a title needs an issue, a name,
+ # or a target. Keeping assembly here means the format lives in one
+ # place and every handler supplies only facts.
  #
  # Runs at every session start and every prompt, so it must never block
  # either: every mode exits 0, and problems are reported once through a
@@ -53,6 +54,9 @@ readonly TITLE_MAX=80
 readonly FORMAT_JQ='
   def slug:
     ascii_downcase | gsub("[^a-z0-9]+"; " ") | sub("^ "; "") | sub(" $"; "");
+  # A slug from a branch or workspace name is already a name: only its
+  # separators change, and its casing is kept.
+  def unslug: gsub("[-_[:space:]]+"; " ") | sub("^ "; "") | sub(" $"; "");
   # A name often repeats the issue key ("EX-1337: Fix …") or carries an
   # area prefix ("Billing :: Fix …"); neither belongs in the title.
   def clean_name:
@@ -78,7 +82,8 @@ readonly FORMAT_JQ='
       ($o | field("issue")) as $issue
       | ($o | field("verb")) as $verb
       | ($o | field("target")) as $target
-      | ($o | field("name") | clean_name | slug) as $name
+      | (if ($o | field("slug")) != "" then ($o | field("slug") | unslug)
+         else ($o | field("name") | clean_name | slug) end) as $name
       | (if $target != "" then "\($verb) → \($target)" else $verb end)
         as $stage
       | if $issue == "" and $name == "" and $target == "" then empty

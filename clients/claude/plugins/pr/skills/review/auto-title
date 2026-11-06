@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #?/name     auto-title — Session title fields for a pull request review
-#?/version  3.0.0
+#?/version  3.1.0
 #?/synopsis auto-title < hook-payload.json
 #?/description
  # Handler for the auto-title plugin, which runs it when a prompt
@@ -23,8 +23,10 @@
  # yields only the target, `#<n>`.
  #
  # The issue is the first of: `--issue=<key>` in the prompt, a key in
- # the PR's title, a key in its branch name. The name is the PR's title
- # as fetched; the plugin strips the key and slugifies it.
+ # the PR's title, a key in its branch name. The name is the slug after
+ # the key in the branch name, which is hand-written to be short and is
+ # kept in its own casing, else the PR's title, which the plugin
+ # lowercases and strips the key from.
  #
  # auto-title runs it in the session's working directory, so git and gh
  # resolve the repo the way the review itself does. Needs bash, git,
@@ -69,6 +71,7 @@ command -v jq >/dev/null 2>&1 || exit 0
 command -v git >/dev/null 2>&1 || exit 0
 
 prompt="$(jq -r '.prompt // empty' <<< "${payload}")"
+ref=""
 
 # The first operand, if the prompt has one. Anything that isn't one of
 # the PR forms below, such as a flag, means "the current branch's PR".
@@ -145,6 +148,15 @@ fi
 
 [[ -n "${number}" ]] || exit 0
 
-jq -nc --arg issue "${issue}" --arg name "${pr_title}" \
+# The branch's slug, when the branch is named `<KEY>-<slug>` or
+# `<KEY>_<slug>` for the issue, possibly under a category directory.
+slug=""
+if [[ -n "${issue}" && "${issue}" != "#"* ]]; then
+  shopt -s nocasematch
+  [[ "${ref}" =~ (^|[^A-Za-z0-9])${issue}[-_]([^/]+)$ ]] && slug="${BASH_REMATCH[2]}"
+  shopt -u nocasematch
+fi
+
+jq -nc --arg issue "${issue}" --arg name "${pr_title}" --arg slug "${slug}" \
   --arg target "${repo:+${repo}}#${number}" \
-  '{issue: $issue, name: $name, verb: "review", target: $target}'
+  '{issue: $issue, name: $name, slug: $slug, verb: "review", target: $target}'

@@ -427,7 +427,9 @@ refactor, not a plain move.
   prompt, an upper-case key in the PR's title, one in its branch name;
   a short list of look-alikes (`UTF-8`, `CVE-…`) is skipped. `--issue`
   is in the skill's argument hint for that purpose alone and plays no
-  part in the review. The name is the PR's title. The PR is the first
+  part in the review. The name is the slug after the key in the PR's
+  branch name, hand-written to be short and kept in its own casing,
+  else the PR's title. The PR is the first
   operand: a number for the current checkout's repo, or
   `<owner>/<repo>#<n>` or a PR URL from any directory, forms the skill
   accepts too since 2026-11-06 (`pr:sweep` already passed the first).
@@ -546,7 +548,7 @@ collisions).
   Jira summary when the cwd is inside a foreman project, fetched with
   one REST call using the credentials `foreman config get` returns,
   because a hook has no MCP; elsewhere it is the slug after the key in
-  the branch or workspace name. A key Jira reports unknown (`utf-8`) is
+  the branch or workspace name, casing kept. A key Jira reports unknown (`utf-8`) is
   free text. With no issue, the name is the first five words of a
   free-text argument; a URL, a file, or no argument declines. The
   surroundings count whatever the argument is: `/state-the-nature the
@@ -642,7 +644,7 @@ and the skill's frontmatter name, so a consumer never writes a pattern
 and never restates the client's naming rule. The handler gets the
 `UserPromptSubmit` payload on stdin, runs in the session's cwd, and
 prints one line or nothing: a JSON object of title fields (`issue`,
-`name`, `verb`, `target`), which the plugin assembles into the format
+`name` or `slug`, `verb`, `target`), which the plugin assembles into the format
 below (since 2026-11-06), or any other text, used verbatim. Empty
 output or a non-zero exit declines, and the next matching rule is
 tried. Colocation won over a plugin-root
@@ -685,7 +687,9 @@ work, not a kind of session; with it first, every session for an issue
 shares a prefix across its lifecycle and across the repos its PRs land
 in. The name follows because a bare key says nothing about the work: it
 is the issue's or PR's title as a lowercase slug with spaces, so the key
-stays the only uppercase landmark. The verb comes last, lowercase, from
+stays the only uppercase landmark, or a branch's own slug with its
+casing kept, since someone already wrote that as a name. The verb comes
+last, lowercase, from
 one small vocabulary (`triage`, `plan`, `implement`, `review`), not the
 skill's name and not a noun; a target follows it only where one issue
 can have several sessions of the same kind, as reviews do, one per PR.

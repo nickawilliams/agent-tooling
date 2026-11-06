@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #?/name     auto-title.sh — Title fields for the Jira lifecycle skills
-#?/version  1.0.0
+#?/version  1.1.0
 #?/synopsis source "${BASH_SOURCE[0]%/*}/../../lib/auto-title.sh"
 #?/description
  # Sourced by the auto-title handlers beside make-it-so, ready-room, and
@@ -17,7 +17,8 @@
  # /browse/ URL, else the single key in the branch name, else the single
  # key in the last components of the working directory; make-it-so also
  # takes a plain number as a GitHub issue. The name is the issue's Jira
- # summary, else the slug after the key in the branch or workspace name.
+ # summary, else the slug after the key in the branch or workspace name,
+ # which keeps its own casing.
  # Without an issue, the name is the first words of a free-text
  # argument; a URL, a file path, or no argument gives no title.
  #
@@ -269,13 +270,13 @@ work_title::_text_name() {
  #
  # @stdin                  UserPromptSubmit hook payload
  #
- # @stdout                 `{"issue","name","verb"}`, or nothing
+ # @stdout                 `{"issue","name","slug","verb"}`, or nothing
  #
  # @exit    0              Always
  ##
 work_title::run() {
   local verb="${1}" numbers=0
-  local payload prompt arg operand issue="" name="" from_operand=0 rc
+  local payload prompt arg operand issue="" name="" slug="" from_operand=0 rc
 
   [[ "${2:-}" == "--numbers" ]] && numbers=1
   payload="$(cat)"
@@ -311,7 +312,7 @@ work_title::run() {
         name="$(work_title::_jira_summary "${issue}")" || name=""
       fi
     fi
-    [[ -n "${name}" || -z "${issue}" ]] || name="$(work_title::_env_slug "${issue}")"
+    [[ -n "${name}" || -z "${issue}" ]] || slug="$(work_title::_env_slug "${issue}")"
   fi
 
   # No issue: the free text itself, or nothing.
@@ -320,6 +321,6 @@ work_title::run() {
     [[ -n "${name}" ]] || return 0
   fi
 
-  jq -nc --arg issue "${issue}" --arg name "${name}" --arg verb "${verb}" \
-    '{issue: $issue, name: $name, verb: $verb}'
+  jq -nc --arg issue "${issue}" --arg name "${name}" --arg slug "${slug}" \
+    --arg verb "${verb}" '{issue: $issue, name: $name, slug: $slug, verb: $verb}'
 }
