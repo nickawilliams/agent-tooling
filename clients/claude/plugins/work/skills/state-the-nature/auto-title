@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+#?/name     auto-title — Session title fields for a bug triage
+#?/version  1.0.0
+#?/synopsis auto-title < hook-payload.json
+#?/description
+ # Handler for the auto-title plugin, which runs it when a prompt
+ # invokes /work:state-the-nature or bare /state-the-nature. The resolution of
+ # the issue and its name is shared with the other Jira lifecycle
+ # skills in ../../lib/auto-title.sh; this file supplies the verb.
+ ##
+
+set -uo pipefail
+
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../../lib/auto-title.sh
+source "${BASH_SOURCE[0]%/*}/../../lib/auto-title.sh" || exit 0
+
+work_title::run triage

@@ -38,11 +38,16 @@ this order. Any words after an issue key are extra instructions.
 | Anything else | Fallback | Report: the text itself (an error message, a symptom, a Datadog, Sentry, or Slack link) |
 | Nothing | — | Environment check, then Q&A |
 
-**No argument.** Look first for a key in the branch name, the working
-directory path, and this conversation, the same way
+**A key from the surroundings.** When the argument is not a key (a
+file, a report, or nothing), look for one in the branch name first,
+then the working directory path, then this conversation, the same way
 `ready-room` does, and look for an error or stack trace pasted
-earlier in the conversation. Offer what you find rather than assume
-it. Otherwise ask one batch of questions:
+earlier in the conversation. Offer what you find ("Start from
+EX-123?") rather than assume it. Accepted alongside a report, the
+issue is context rather than subject: diagnose the report as a defect
+met in that issue's work, link the two, and still reach the verdict
+on the report itself. With no key and no argument, ask one batch of
+questions:
 
 - What happened, and what should have happened instead?
 - Where — product area, screen, endpoint, job — and for whom (a

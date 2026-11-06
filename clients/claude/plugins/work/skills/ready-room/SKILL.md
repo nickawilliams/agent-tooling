@@ -33,8 +33,10 @@ honor.
 A string that looks like a key but doesn't resolve (`utf-8`) is seed
 text, not an error.
 
-**No argument.** Look for a key in the surroundings before asking,
-using the same method as `make-it-so`:
+**A key from the surroundings.** When the argument is not a key (seed
+text, a file, or nothing), look for one in the surroundings before
+going on, using the same method as `make-it-so` and preferring a key
+in the branch name over one found only in the path:
 
 ```bash
 { git branch --show-current; pwd | tr '/' '\n' | tail -4; } \
@@ -46,8 +48,11 @@ using the same method as `make-it-so`:
 
 Also consider anything earlier in this conversation: a key, a draft,
 an error, a pasted thread. If a candidate resolves to an open issue,
-offer it ("Start from EX-123?") rather than assuming it. Otherwise,
-open the Q&A — one batch of plain questions, not a form:
+offer it ("Start from EX-123?") rather than assuming it. Accepted
+alongside seed text, the issue is the starting point and the seed
+text is extra instructions for refining it, as words after an
+explicit key are. With no key and no argument, open the Q&A — one
+batch of plain questions, not a form:
 
 - What's wrong, or what should exist that doesn't? Who notices?
 - Is something broken (bug) or missing (feature or improvement)?
