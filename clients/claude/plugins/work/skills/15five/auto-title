@@ -1,22 +1,23 @@
 #!/usr/bin/env bash
 
 #?/name     auto-title — Session title fields for a 15Five check-in
-#?/version  1.1.0
+#?/version  2.0.0
 #?/synopsis auto-title < hook-payload.json
 #?/description
  # Handler for the auto-title plugin, which runs it when a prompt
  # invokes /work:15five or bare /15five. Prints the verb
  # `15five.check-in` with the check-in's week as the target, which the
- # plugin assembles into `15five.check-in → 2026-09-25`.
+ # plugin assembles into `15five.check-in → 2026-W39`.
  #
  # 15Five weeks run Saturday to Friday and the archive lists them by
- # range (`Sep 19 – Sep 25`), so the week is identified by its Friday,
- # as an ISO date. The prompt's week comes in the forms the skill
+ # range (`Sep 19 – Sep 25`), so the week is identified by the ISO week
+ # of its Friday, which holds its five working days and reads as a
+ # sequence in a session list. The prompt's week comes in the forms the skill
  # accepts: nothing or `this week` for the current week, `last week`,
  # a date (`Sep 19`, `2026-09-19`, `9/19`), or a range, of which the
  # last date counts. A date without a year is this year's unless that
  # puts it more than two weeks ahead, then last year's. Any date is
- # moved to the Friday of its week. An argument that names no date and
+ # moved to the Friday of its 15Five week first. An argument that names no date and
  # no relative week is kept as the target verbatim, in quotes, so the
  # session is still findable by what was typed.
  #
@@ -71,21 +72,29 @@ auto_title::_date() {
 }
 
 #@/private
- # Print the Friday that ends the 15Five week holding a day.
+ # Print the ISO week of the 15Five week holding a day.
+ #
+ # The 15Five week's Friday decides: its ISO week holds the week's
+ # Monday to Friday, and the ISO week's year is that of its Thursday.
  #
  # @operand <jdn>          The day number
  #
- # @stdout                 YYYY-MM-DD of that week's Friday
+ # @stdout                 YYYY-Www
  ##
-auto_title::_friday() {
-  local j="${1}" weekday
+auto_title::_week() {
+  local j="${1}" weekday friday thursday year jan1
 
   weekday=$(( (j + 1) % 7 ))   # 0 Sunday … 6 Saturday
   if (( weekday == 6 )); then
-    auto_title::_date $(( j + 6 ))
+    friday=$(( j + 6 ))
   else
-    auto_title::_date $(( j + 5 - weekday ))
+    friday=$(( j + 5 - weekday ))
   fi
+  thursday=$(( friday - 1 ))
+  year="$(auto_title::_date "${thursday}")"
+  year=$(( 10#${year:0:4} ))
+  jan1="$(auto_title::_jdn "${year}" 1 1)"
+  printf '%04d-W%02d' "${year}" $(( (thursday - jan1) / 7 + 1 ))
 }
 
 #@/private
@@ -151,14 +160,14 @@ done
 
 target=""
 if [[ -n "${jdn}" ]]; then
-  target="$(auto_title::_friday "${jdn}")"
+  target="$(auto_title::_week "${jdn}")"
 else
   lower="$(printf '%s' "${arg}" | tr '[:upper:]' '[:lower:]')"
   if [[ "${lower}" == *"last week"* || "${lower}" == *"previous week"* ]]; then
-    target="$(auto_title::_friday $(( today_jdn - 7 )))"
+    target="$(auto_title::_week $(( today_jdn - 7 )))"
   elif [[ -z "${lower//[[:space:]]/}" || "${lower}" == *"this week"* \
       || "${lower}" == *"current"* ]]; then
-    target="$(auto_title::_friday "${today_jdn}")"
+    target="$(auto_title::_week "${today_jdn}")"
   else
     # A week the skill will have to work out itself: keep the words,
     # quoted so they read as a phrase in the session list.

@@ -558,9 +558,10 @@ collisions).
   did with no argument.
 - `15five` ships its own handler (2026-11-06): no issue or name, the
   verb `15five.check-in`, and the check-in's week as the target,
-  giving `15five.check-in → 2026-09-25`. 15Five weeks run Saturday to
+  giving `15five.check-in → 2026-W39`. 15Five weeks run Saturday to
   Friday and the archive lists them as ranges, so the week is named by
-  its Friday as an ISO date, whatever form the prompt used (`last
+  the ISO week of its Friday, which holds its working days and reads
+  as a sequence in the list, whatever form the prompt used (`last
   week`, `Sep 19`, `Sep 19 – Sep 25`, nothing for the current week).
   Words that name no week are kept as the target verbatim, in quotes
   (`15five.check-in → "the week after my vacation"`), so the session
