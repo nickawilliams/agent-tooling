@@ -78,7 +78,8 @@ slug, else from Jira when the directory is inside a foreman project.
 the issue from `--issue=<key>`, else the PR's title, else its branch
 name, and the name from the branch's slug, else the PR's title.
 `/work:15five` gives `15five.check-in → 2026-W39`, the ISO week of the
-check-in. An unknown field is dropped
+check-in, and `/work:standup` gives `standup → 2026-11-06`, the
+reference day. An unknown field is dropped
 (`dedupe vendor imports · plan`, `review → <repo>#<n>`). A name set with
 `/rename` is never overwritten. To name a session after the fact, run
 `/auto-title`: it replays the last skill invoked in the session, or the

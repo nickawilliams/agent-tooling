@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+
+#?/name     auto-title — Session title fields for standup notes
+#?/version  1.0.0
+#?/synopsis auto-title < hook-payload.json
+#?/description
+ # Handler for the auto-title plugin, which runs it when a prompt
+ # invokes /work:standup or bare /standup. Prints the verb `standup`
+ # with the reference day as the target, which the plugin assembles
+ # into `standup → 2026-11-06`.
+ #
+ # The day is resolved the way the skill resolves it: GNU date (`gdate`
+ # on macOS, `date` elsewhere) parses the argument, so `tomorrow`,
+ # `last tuesday`, and `10/28` all work, and an empty argument is
+ # today. Words GNU date can't read are kept as the target verbatim,
+ # in quotes, so the session is still findable by what was typed; with
+ # no GNU date at all, only the empty argument resolves and anything
+ # else is kept the same way.
+ #
+ # Needs bash and jq; GNU date for anything but today. No module-sh,
+ # as with every script a hook runs here.
+ ##
+
+set -uo pipefail
+
+readonly VERBATIM_MAX=40
+
+payload="$(cat)"
+
+command -v jq >/dev/null 2>&1 || exit 0
+
+prompt="$(jq -r '.prompt // empty' <<< "${payload}")"
+arg=""
+[[ "${prompt}" =~ ^/[^[:space:]]*[[:space:]]*(.*)$ ]] && arg="${BASH_REMATCH[1]}"
+arg="$(printf '%s' "${arg}" | tr -s '[:space:]' ' ')"
+arg="${arg#"${arg%%[![:space:]]*}"}"
+arg="${arg%"${arg##*[![:space:]]}"}"
+
+gnu_date=""
+if command -v gdate >/dev/null 2>&1; then
+  gnu_date="gdate"
+elif date -d now >/dev/null 2>&1; then
+  gnu_date="date"
+fi
+
+target=""
+if [[ -z "${arg}" ]]; then
+  target="$(date +%Y-%m-%d)"
+elif [[ -n "${gnu_date}" ]]; then
+  target="$("${gnu_date}" -d "${arg}" +%Y-%m-%d 2>/dev/null)" || target=""
+fi
+
+if [[ -z "${target}" ]]; then
+  # A day the skill will have to work out itself: keep the words,
+  # quoted so they read as a phrase in the session list.
+  verbatim="${arg//\"/}"
+  (( ${#verbatim} > VERBATIM_MAX )) \
+    && verbatim="${verbatim:0:VERBATIM_MAX-1}…"
+  target="\"${verbatim}\""
+fi
+
+jq -nc --arg target "${target}" '{verb: "standup", target: $target}'

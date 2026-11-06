@@ -572,6 +572,12 @@ collisions).
   is still findable by what was typed. The dates are worked out in
   bash arithmetic, so the handler needs neither GNU nor BSD `date`
   beyond printing today.
+- `standup` ships one too (2026-11-06): the verb `standup` and the
+  reference day as the target, `standup → 2026-11-06`. The day is
+  resolved as the skill resolves it, with GNU date, so `tomorrow`,
+  `last tuesday`, and `10/28` work and an empty argument is today;
+  words GNU date can't read are kept verbatim in quotes, as `15five`
+  does.
 - The three Jira lifecycle skills moved in on 2026-11-02 and call each
   other by full name (`/work:ready-room`, `work:state-the-nature`), so a
   later install can't take the names over. They drive the `foreman` CLI,
