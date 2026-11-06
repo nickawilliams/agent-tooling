@@ -1,7 +1,7 @@
 ---
 name: review
 description: Review a pull request. Use when the user runs /pr:review, asks to review a PR, or wants feedback on changes in a pull request.
-argument-hint: "[pr-number] [--issue=<key>] [--comments=<none|post|submit>] [--level=<severity>] [--watch=<off|on>] [--fresh]"
+argument-hint: "[pr-number | owner/repo#n | pr-url] [--issue=<key>] [--comments=<none|post|submit>] [--level=<severity>] [--watch=<off|on>] [--fresh]"
 ---
 
 Review pull request $ARGUMENTS and produce a review in two stages: build a
@@ -104,8 +104,13 @@ name the flag that would have changed it.
 
 ## 1. Resolve the PR
 
-If a number is given in the arguments, use it. If not, try the current
-branch's PR (`gh pr view` with no number resolves it). If that fails, run
+The PR is the first argument when there is one: a number (`3442` or
+`#3442`) for a PR in the current checkout's repository, or a PR named in
+full, as `<owner>/<repo>#<n>` or a PR URL, which works from any
+directory. `gh pr view` takes a URL directly; for `<owner>/<repo>#<n>`
+pass `--repo <owner>/<repo>` and the number, to every `gh` call that
+follows as well. With no PR argument, try the current branch's PR
+(`gh pr view` with no number resolves it). If that fails, run
 `gh pr list`, show the open PRs, and ask which one.
 
 `--issue=<key>` names the issue the PR belongs to, such as `ABC-123`. It

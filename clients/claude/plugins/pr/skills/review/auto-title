@@ -1,26 +1,30 @@
 #!/usr/bin/env bash
 
-#?/name     auto-title — Session title for a pull request review
-#?/version  2.0.0
+#?/name     auto-title — Session title fields for a pull request review
+#?/version  3.0.0
 #?/synopsis auto-title < hook-payload.json
 #?/description
  # Handler for the auto-title plugin, which runs it when a prompt
  # invokes /pr:review or bare /review. Reads the UserPromptSubmit
- # payload and prints `<issue> review <repo>#<number>`, or nothing when
- # there is no PR to name, which auto-title treats as declining.
+ # payload and prints the title's fields as JSON: the issue, the PR's
+ # title as the name, the verb `review`, and `<repo>#<number>` as the
+ # target, which the plugin assembles into
+ # `EX-1337 · timecard sync drops overtime · review → api#3442`. With no
+ # PR to name it prints nothing, which auto-title treats as declining.
  #
- # The issue leads so that every session for one piece of work shares a
- # prefix, across repos and across skills. It comes from the first of:
- # an explicit `--issue=<key>` in the prompt, a key in the PR's title, a
- # key in the PR's branch name. With none, the title drops the issue and
- # keeps its order: `review <repo>#<number>`.
+ # The PR is the prompt's first operand: a number (with or without `#`),
+ # `<owner>/<repo>#<n>`, or a PR URL. The last two also name the repo;
+ # a bare number leaves that to the `origin` remote, so outside a
+ # checkout the full form is required, as it is for the skill. With no
+ # operand, the open PR for the current branch. One REST call then
+ # fetches the PR's number, title, and head branch. REST, because in a
+ # cloud session the GitHub proxy rejects GraphQL, which `gh pr` is
+ # built on. A cloud clone also has no remote, so a bare number there
+ # yields only the target, `#<n>`.
  #
- # The repo name comes from the `origin` remote and the number from the
- # prompt, so a prompt carrying both a number and `--issue` needs no
- # network. Otherwise one REST call fetches the PR's number, title, and
- # branch. REST, because in a cloud session the GitHub proxy rejects
- # GraphQL, which `gh pr` is built on. A cloud clone also has no remote,
- # so there the title degrades to what the prompt alone gives.
+ # The issue is the first of: `--issue=<key>` in the prompt, a key in
+ # the PR's title, a key in its branch name. The name is the PR's title
+ # as fetched; the plugin strips the key and slugifies it.
  #
  # auto-title runs it in the session's working directory, so git and gh
  # resolve the repo the way the review itself does. Needs bash, git,
@@ -66,26 +70,40 @@ command -v git >/dev/null 2>&1 || exit 0
 
 prompt="$(jq -r '.prompt // empty' <<< "${payload}")"
 
-# Owner and repo from the remote, in any of the forms git accepts:
-# https://github.com/o/r(.git), git@github.com:o/r(.git), ssh://git@github.com/o/r.
-# A cloud session's clone is built from a seed bundle and has no remote
-# at all, so both stay empty there.
-owner=""
-repo=""
-remote="$(git remote get-url origin 2>/dev/null)" || remote=""
-remote="${remote%.git}"
-remote="${remote%/}"
-if [[ "${remote}" =~ [:/]([^/:]+)/([^/]+)$ ]]; then
-  owner="${BASH_REMATCH[1]}"
-  repo="${BASH_REMATCH[2]}"
+# The first operand, if the prompt has one. Anything that isn't one of
+# the PR forms below, such as a flag, means "the current branch's PR".
+operand=""
+if [[ "${prompt}" =~ ^/[^[:space:]]+[[:space:]]+([^[:space:]]+) ]]; then
+  operand="${BASH_REMATCH[1]}"
 fi
 
-# The number is the first operand, as the skill's argument-hint has it,
-# with or without a leading '#'. Anything else, such as a flag, means
-# "the current branch's PR".
+owner=""
+repo=""
 number=""
-if [[ "${prompt}" =~ ^/[^[:space:]]+[[:space:]]+#?([0-9]+)([[:space:]]|$) ]]; then
+if [[ "${operand}" =~ ^#?([0-9]+)$ ]]; then
   number="${BASH_REMATCH[1]}"
+elif [[ "${operand}" =~ ^([^/#[:space:]]+)/([^/#[:space:]]+)#([0-9]+)$ ]]; then
+  owner="${BASH_REMATCH[1]}"
+  repo="${BASH_REMATCH[2]}"
+  number="${BASH_REMATCH[3]}"
+elif [[ "${operand}" =~ ^https?://[^/]+/([^/]+)/([^/]+)/pull/([0-9]+) ]]; then
+  owner="${BASH_REMATCH[1]}"
+  repo="${BASH_REMATCH[2]}"
+  number="${BASH_REMATCH[3]}"
+fi
+
+# Otherwise, owner and repo from the remote, in any of the forms git
+# accepts: https://github.com/o/r(.git), git@github.com:o/r(.git),
+# ssh://git@github.com/o/r. A cloud session's clone is built from a seed
+# bundle and has no remote at all, so both stay empty there.
+if [[ -z "${repo}" ]]; then
+  remote="$(git remote get-url origin 2>/dev/null)" || remote=""
+  remote="${remote%.git}"
+  remote="${remote%/}"
+  if [[ "${remote}" =~ [:/]([^/:]+)/([^/]+)$ ]]; then
+    owner="${BASH_REMATCH[1]}"
+    repo="${BASH_REMATCH[2]}"
+  fi
 fi
 
 # An explicit --issue wins: a Jira key in any case, or an issue number.
@@ -99,10 +117,10 @@ if [[ "${prompt}" =~ (^|[[:space:]])--issue[=[:space:]]+([^[:space:]]+) ]]; then
   fi
 fi
 
-# Ask GitHub only for what the prompt didn't supply, and only when
-# there is a repo to ask about.
-if [[ ( -z "${number}" || -z "${issue}" ) && -n "${repo}" ]] \
-    && command -v gh >/dev/null 2>&1; then
+# One call to GitHub, when there is a repo to ask about: the name needs
+# the PR's title, and a missing number needs the branch's PR.
+pr_title=""
+if [[ -n "${repo}" ]] && command -v gh >/dev/null 2>&1; then
   fields='[(.number | tostring), .title, .head.ref] | join("\u001f")'
   if [[ -n "${number}" ]]; then
     found="$(gh api "repos/${owner}/${repo}/pulls/${number}" \
@@ -118,17 +136,15 @@ if [[ ( -z "${number}" || -z "${issue}" ) && -n "${repo}" ]] \
   fi
 
   if [[ -n "${found}" ]]; then
-    IFS=$'\x1f' read -r found_number title ref <<< "${found}"
+    IFS=$'\x1f' read -r found_number pr_title ref <<< "${found}"
     number="${number:-${found_number}}"
-    [[ -n "${issue}" ]] || issue="$(auto_title::_key "${title}")"
+    [[ -n "${issue}" ]] || issue="$(auto_title::_key "${pr_title}")"
     [[ -n "${issue}" ]] || issue="$(auto_title::_key "${ref}")"
   fi
 fi
 
 [[ -n "${number}" ]] || exit 0
 
-if [[ -n "${issue}" ]]; then
-  printf '%s review %s#%s\n' "${issue}" "${repo}" "${number}"
-else
-  printf 'review %s#%s\n' "${repo}" "${number}"
-fi
+jq -nc --arg issue "${issue}" --arg name "${pr_title}" \
+  --arg target "${repo:+${repo}}#${number}" \
+  '{issue: $issue, name: $name, verb: "review", target: $target}'
