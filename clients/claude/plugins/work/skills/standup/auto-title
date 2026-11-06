@@ -33,6 +33,7 @@ prompt="$(jq -r '.prompt // empty' <<< "${payload}")"
 arg=""
 [[ "${prompt}" =~ ^/[^[:space:]]*[[:space:]]*(.*)$ ]] && arg="${BASH_REMATCH[1]}"
 arg="$(printf '%s' "${arg}" | tr -s '[:space:]' ' ')"
+arg="${arg//\"/}"
 arg="${arg#"${arg%%[![:space:]]*}"}"
 arg="${arg%"${arg##*[![:space:]]}"}"
 
@@ -53,7 +54,7 @@ fi
 if [[ -z "${target}" ]]; then
   # A day the skill will have to work out itself: keep the words,
   # quoted so they read as a phrase in the session list.
-  verbatim="${arg//\"/}"
+  verbatim="${arg}"
   (( ${#verbatim} > VERBATIM_MAX )) \
     && verbatim="${verbatim:0:VERBATIM_MAX-1}…"
   target="\"${verbatim}\""
