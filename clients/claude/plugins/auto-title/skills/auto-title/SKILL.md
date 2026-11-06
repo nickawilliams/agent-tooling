@@ -1,11 +1,23 @@
 ---
 name: auto-title
-description: Show which skills set the session title automatically and whether auto-title is healthy. Use when the user runs /auto-title, asks why a session was or wasn't renamed, or asks how to make a skill name its session.
+description: Name this session in the house title format, from the last skill invoked here or from an invocation you give, or show which skills set titles automatically and whether auto-title is healthy. Use when the user runs /auto-title, asks to name or rename the session after its work, or asks why a session was or wasn't renamed.
+argument-hint: "[status | /<skill> [args]]"
 disable-model-invocation: true
 ---
 
-Run this and show its output verbatim in a code block, without
-summarizing or reordering it:
+The hook behind this plugin has already acted on the prompt before this
+skill runs. What to do depends on the argument.
+
+**No argument, or an invocation such as `/pr:review 3442`:** the hook
+has set the title, replaying the latest skill invocation recorded in
+this session's transcript (or the one given), and a system reminder
+from auto-title says which title it set, or why it set none. Reply with
+one line saying so; run nothing. When none was set, say what would work:
+`/auto-title /<skill> [args]` names the session as if that command had
+started it.
+
+**`status`:** run this and show its output verbatim in a code block,
+without summarizing or reordering it:
 
 ```bash
 CLAUDE_PLUGIN_DATA="${CLAUDE_PLUGIN_DATA}" "${CLAUDE_PLUGIN_ROOT}/auto-title" status

@@ -720,6 +720,23 @@ It exits at once when the payload carries `session_title`, which is
 present only once a title exists, so a `/rename` is never overwritten
 and a session is titled at most once.
 
+**Naming after the fact** (2026-11-06). The model can't rename a
+session, but the `UserPromptSubmit` hook can on any prompt, and it
+overrides an existing title as `/rename` does, so the `/auto-title`
+command is the one exception to titling once. Bare, the hook reads the
+transcript the payload names (`transcript_path`) for the latest skill
+invocation that has a handler, typed (`<command-name>` and
+`<command-args>` tags in a user entry) or made through the Skill tool
+(an assistant tool_use), and replays it in the `cwd` recorded with it,
+so the title comes out as it would have at the time. With an invocation
+of its own, `/auto-title /pr:review 3442`, it replays that one in the
+current cwd. The outcome, the title or the reason there is none, goes
+to the skill as `additionalContext`, and the skill only reports it. The
+health report moved to `/auto-title status`, which the hook leaves
+alone. Only a live session can be named this way: the title lives in
+its transcript, and the hook runs inside it, so an old session is
+`claude --resume`d first.
+
 **Failing loudly.** The cache layout and `installed_plugins.json` aren't
 documented as stable, so nothing globs them. The enumeration is still an
 assumption, and `index` checks it every session with the plugin's own

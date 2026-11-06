@@ -78,9 +78,12 @@ inside a foreman project, else from the branch or workspace slug.
 the issue from `--issue=<key>`, else the PR's title, else its branch
 name, and the name from the PR's title. An unknown field is dropped
 (`dedupe vendor imports · plan`, `review → <repo>#<n>`). A name set with
-`/rename` is never overwritten. `/auto-title` shows the handlers found
-at the last session start and any problem that has disabled it. Needs
-`jq` and `claude` on `PATH`.
+`/rename` is never overwritten. To name a session after the fact, run
+`/auto-title`: it replays the last skill invoked in the session, or the
+one you give it (`/auto-title /pr:review 3442`), and sets the title even
+if one exists. `/auto-title status` shows the handlers found at the last
+session start and any problem that has disabled it. Needs `jq` and
+`claude` on `PATH`.
 
 ## Install
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #?/name     auto-title — Name a session after the skill that starts it
-#?/version  1.1.0
+#?/version  1.2.0
 #?/synopsis auto-title {index|prompt|status}
 #?/description
  # Hook script for the auto-title plugin. `index` runs at SessionStart:
@@ -360,6 +360,96 @@ auto_title::_format() {
     2>/dev/null
 }
 
+#@/private
+ # Run the first handler whose rule matches a prompt and print the title.
+ #
+ # The handler gets the payload with `prompt` and `cwd` replaced, so a
+ # replayed invocation resolves as it would have when typed. A handler
+ # that declines passes the turn to the next matching rule.
+ #
+ # @operand <index>        The session's index file
+ # @operand <payload>      UserPromptSubmit payload
+ # @operand <cwd>          Directory to run the handler in
+ # @operand <prompt>       The invocation to match, such as /pr:review 3
+ #
+ # @stdout                 The assembled title, or nothing
+ #
+ # @exit    0              A title was printed
+ # @exit    1              No rule matched or every handler declined
+ # @exit    2              No rule matched at all
+ ##
+auto_title::_match() {
+  local index="${1}" payload="${2}" cwd="${3}" prompt="${4}"
+  local run joined pattern title matched=0
+  local -a patterns
+
+  payload="$(jq -c --arg prompt "${prompt}" --arg cwd "${cwd}" \
+    '.prompt = $prompt | .cwd = $cwd' <<< "${payload}")"
+
+  while IFS=$'\x1f' read -r run joined; do
+    [[ -n "${run}" ]] || continue
+    IFS=$'\x1e' read -r -a patterns <<< "${joined}"
+    for pattern in "${patterns[@]}"; do
+      [[ "${prompt}" =~ ${pattern} ]] || continue
+      matched=1
+
+      title="$(cd "${cwd:-.}" 2>/dev/null \
+        && printf '%s' "${payload}" | "${run}" 2>/dev/null)" || title=""
+      title="${title%%$'\n'*}"
+      title="${title#"${title%%[![:space:]]*}"}"
+      title="${title%"${title##*[![:space:]]}"}"
+      [[ -n "${title}" ]] || continue 2
+      title="$(auto_title::_format "${title}")"
+      [[ -n "${title}" ]] || continue 2
+
+      printf '%s\n' "${title}"
+      return 0
+    done
+  done < <(jq -r '.rules[] | [.run, (.patterns | join("\u001e"))]
+    | join("\u001f")' "${index}")
+
+  (( matched )) && return 1
+  return 2
+}
+
+#@/private
+ # List the skill invocations recorded in a transcript, oldest first.
+ #
+ # Two kinds count: a typed slash command, stored as a user entry with
+ # `<command-name>` and `<command-args>` tags, and a Skill tool call,
+ # stored as an assistant tool_use. Subagent entries are skipped. The
+ # transcript is written asynchronously and may lag the current turn;
+ # a replay wants an earlier invocation, so that is no loss.
+ #
+ # @operand <transcript>   Path to the session's JSONL transcript
+ #
+ # @stdout                 `<cwd> US <prompt>` per invocation
+ ##
+auto_title::_invocations() {
+  jq -rR '
+    (fromjson? // empty)
+    | select(type == "object" and ((.isSidechain // false) | not))
+    | .cwd as $cwd
+    | (.message.content
+       | if type == "string" then .
+         else ([.[]? | select(.type == "text") | .text] | join("\n")) end)
+      as $text
+    | if .type == "user" and ((.isMeta // false) | not)
+         and ($text | test("<command-name>/")) then
+        ($text | capture("<command-name>(?<n>[^<]*)</command-name>").n) as $n
+        | ($text | (capture("<command-args>(?<a>[^<]*)</command-args>").a)
+           // "") as $a
+        | $n + (if $a == "" then "" else " " + $a end)
+      elif .type == "assistant" then
+        .message.content[]?
+        | select(.type == "tool_use" and .name == "Skill")
+        | "/" + (.input.skill // "")
+          + (if (.input.args // "") == "" then "" else " " + .input.args end)
+      else empty end
+    | select(test("^/[^[:space:]]+"))
+    | [($cwd // ""), .] | join("\u001f")' "${1}" 2>/dev/null
+}
+
 #@/subcommand prompt
  # Set the session title if this prompt invokes a registered skill.
  #
@@ -370,11 +460,20 @@ auto_title::_format() {
  # goes through auto_title::_format, so a handler that prints fields
  # and one that prints a finished title are both honored.
  #
+ # The /auto-title command is the exception to titling once. Bare, it
+ # replays the latest skill invocation in the transcript that has a
+ # handler; with an invocation of its own (`/auto-title /pr:review 3`),
+ # it replays that one, in the session's cwd. Either way the title is
+ # set even when one exists, and the outcome goes to the skill as
+ # additionalContext so it can report it. `/auto-title status` is left
+ # to the skill.
+ #
  # @env     CLAUDE_PLUGIN_DATA  Persistent data directory holding the index
  #
  # @stdin                  UserPromptSubmit hook payload
  #
  # @reads   $CLAUDE_PLUGIN_DATA/sessions/<session_id>.json
+ # @reads   The transcript named in the payload, for a bare /auto-title
  #
  # @stdout                 Hook JSON setting the title, or nothing
  #
@@ -382,16 +481,24 @@ auto_title::_format() {
  ##
 auto_title::prompt() {
   local payload session_title prompt session_id data_dir index cwd
-  local run joined pattern title
-  local -a patterns
+  local explicit=0 args="" transcript title="" line why=""
+  local -a invocations=()
 
   command -v jq >/dev/null 2>&1 || return 0
   payload="$(cat)"
 
-  session_title="$(jq -r '.session_title // empty' <<< "${payload}")"
-  [[ -z "${session_title}" ]] || return 0
   prompt="$(jq -r '.prompt // empty' <<< "${payload}")"
   [[ "${prompt}" == /* ]] || return 0
+
+  if [[ "${prompt}" =~ ^/auto-title(:auto-title)?([[:space:]]+(.*))?$ ]]; then
+    explicit=1
+    args="${BASH_REMATCH[3]:-}"
+    args="${args%"${args##*[![:space:]]}"}"
+    [[ "${args}" == "status" ]] && return 0
+  else
+    session_title="$(jq -r '.session_title // empty' <<< "${payload}")"
+    [[ -z "${session_title}" ]] || return 0
+  fi
 
   session_id="$(jq -r '.session_id // empty' <<< "${payload}")"
   data_dir="${CLAUDE_PLUGIN_DATA:-}"
@@ -409,27 +516,55 @@ auto_title::prompt() {
 
   cwd="$(jq -r '.cwd // empty' <<< "${payload}")"
 
-  while IFS=$'\x1f' read -r run joined; do
-    [[ -n "${run}" ]] || continue
-    IFS=$'\x1e' read -r -a patterns <<< "${joined}"
-    for pattern in "${patterns[@]}"; do
-      [[ "${prompt}" =~ ${pattern} ]] || continue
+  if (( ! explicit )); then
+    title="$(auto_title::_match "${index}" "${payload}" "${cwd}" "${prompt}")" \
+      || return 0
+    jq -nc --arg title "${title}" '{hookSpecificOutput: {
+      hookEventName: "UserPromptSubmit", sessionTitle: $title}}'
+    return 0
+  fi
 
-      title="$(cd "${cwd:-.}" 2>/dev/null \
-        && printf '%s' "${payload}" | "${run}" 2>/dev/null)" || title=""
-      title="${title%%$'\n'*}"
-      title="${title#"${title%%[![:space:]]*}"}"
-      title="${title%"${title##*[![:space:]]}"}"
-      [[ -n "${title}" ]] || continue 2
-      title="$(auto_title::_format "${title}")"
-      [[ -n "${title}" ]] || continue 2
+  # Explicit: the given invocation, else the transcript's, newest first.
+  if [[ "${args}" == /* ]]; then
+    invocations=("${cwd}"$'\x1f'"${args}")
+  else
+    transcript="$(jq -r '.transcript_path // empty' <<< "${payload}")"
+    if [[ -n "${transcript}" && -r "${transcript}" ]]; then
+      while IFS= read -r line; do
+        [[ "${line}" == *$'\x1f'/auto-title* ]] && continue
+        invocations=("${line}" "${invocations[@]}")
+      done < <(auto_title::_invocations "${transcript}")
+      (( ${#invocations[@]} )) \
+        || why="no skill invocation found in this session's transcript"
+    else
+      why="the hook payload names no readable transcript"
+    fi
+  fi
 
-      jq -nc --arg title "${title}" '{hookSpecificOutput: {
-        hookEventName: "UserPromptSubmit", sessionTitle: $title}}'
-      return 0
-    done
-  done < <(jq -r '.rules[] | [.run, (.patterns | join("\u001e"))]
-    | join("\u001f")' "${index}")
+  for line in "${invocations[@]}"; do
+    title="$(auto_title::_match "${index}" "${payload}" "${line%%$'\x1f'*}" \
+      "${line#*$'\x1f'}")" && break
+    case $? in
+      1) why="the handler for \`${line#*$'\x1f'}\` found nothing to name the session after" ;;
+      2) [[ "${args}" == /* ]] \
+           && why="no skill registers a title handler for \`${args%% *}\`" ;;
+    esac
+    title=""
+  done
+
+  if [[ -n "${title}" ]]; then
+    jq -nc --arg title "${title}" --arg from "${line#*$'\x1f'}" \
+      '{hookSpecificOutput: {hookEventName: "UserPromptSubmit",
+        sessionTitle: $title,
+        additionalContext: ("auto-title set the session title to: " + $title
+          + " (from " + $from + ")")}}'
+  else
+    [[ -n "${why}" ]] \
+      || why="no registered skill has been invoked in this session"
+    jq -nc --arg why "${why}" '{hookSpecificOutput: {
+      hookEventName: "UserPromptSubmit",
+      additionalContext: ("auto-title set no title: " + $why)}}'
+  fi
 }
 
 #@/subcommand status
