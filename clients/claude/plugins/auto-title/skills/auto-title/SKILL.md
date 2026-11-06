@@ -27,8 +27,23 @@ If the user asks how to make a skill name its session: put an executable
 named `auto-title` beside that skill's `SKILL.md`. It receives the
 `UserPromptSubmit` hook payload (JSON with `prompt`, `cwd`, and
 `session_id`) on stdin, runs in the session's working directory, and
-prints the title on one line. Printing nothing declines. The skill then
-answers to both `/<plugin>:<skill>` and bare `/<skill>`; no pattern is
-written. The new handler is picked up at the next session start. An
-existing title, whether from `/rename` or an earlier handler, is never
-overwritten.
+prints one line. Printing nothing declines. The line is normally a JSON
+object of title fields, which the plugin assembles into the house format
+`[<issue> · ]<name> · <verb>[ → <target>]`:
+
+```json
+{"issue": "EX-1337", "name": "Timecard sync drops overtime",
+ "verb": "review", "target": "api#3442"}
+```
+
+gives `EX-1337 · timecard sync drops overtime · review → api#3442`.
+Every field is optional; `issue` is the issue key, `name` the issue's or
+PR's title (the plugin lowercases it, strips a leading key or `Area ::`
+prefix, and shortens it to fit), `verb` what the session does, and
+`target` what the verb acts on. A title needs an issue, a name, or a
+target. Any line that isn't a JSON object is used as the title verbatim.
+
+The skill then answers to both `/<plugin>:<skill>` and bare `/<skill>`;
+no pattern is written. The new handler is picked up at the next session
+start. An existing title, whether from `/rename` or an earlier handler,
+is never overwritten.
