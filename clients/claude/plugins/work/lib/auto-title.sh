@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #?/name     auto-title.sh — Title fields for the Jira lifecycle skills
-#?/version  1.1.0
+#?/version  2.0.0
 #?/synopsis source "${BASH_SOURCE[0]%/*}/../../lib/auto-title.sh"
 #?/description
  # Sourced by the auto-title handlers beside make-it-so, ready-room, and
@@ -16,11 +16,12 @@
  # prompt's first operand when that is a Jira key (any case) or a Jira
  # /browse/ URL, else the single key in the branch name, else the single
  # key in the last components of the working directory; make-it-so also
- # takes a plain number as a GitHub issue. The name is the issue's Jira
- # summary, else the slug after the key in the branch or workspace name,
- # which keeps its own casing.
- # Without an issue, the name is the first words of a free-text
- # argument; a URL, a file path, or no argument gives no title.
+ # takes a plain number as a GitHub issue. The name is the slug after
+ # the key in the branch name, else in the workspace name, which keeps
+ # its own casing and is the same across every session of the issue;
+ # else the issue's Jira summary, for sessions that start before a
+ # workspace exists. Without an issue, the name is the first words of a
+ # free-text argument; a URL, a file path, or no argument gives no title.
  #
  # The Jira lookup is opportunistic: a hook has no MCP, so when the
  # working directory is inside a foreman project this reads the tracker
@@ -296,23 +297,28 @@ work_title::run() {
   [[ -n "${issue}" ]] || issue="$(work_title::_branch_key)"
   [[ -n "${issue}" ]] || issue="$(work_title::_path_key)"
 
-  # Name: the tracker's title, else the slug beside the key.
+  # Name: the slug beside the key in the branch or workspace, else the
+  # tracker's title.
   if [[ "${issue}" == "#"* ]]; then
     name="$(work_title::_github_title "${issue#\#}")"
   elif [[ -n "${issue}" ]]; then
-    name="$(work_title::_jira_summary "${issue}")"
-    rc=$?
-    if (( rc == 4 && from_operand )); then
-      # A key-shaped operand Jira doesn't know is free text; the issue,
-      # if any, comes from the surroundings instead.
-      issue="$(work_title::_branch_key)"
-      [[ -n "${issue}" ]] || issue="$(work_title::_path_key)"
-      name=""
-      if [[ -n "${issue}" ]]; then
-        name="$(work_title::_jira_summary "${issue}")" || name=""
+    slug="$(work_title::_env_slug "${issue}")"
+    if [[ -z "${slug}" ]]; then
+      name="$(work_title::_jira_summary "${issue}")"
+      rc=$?
+      if (( rc == 4 && from_operand )); then
+        # A key-shaped operand Jira doesn't know is free text; the
+        # issue, if any, comes from the surroundings instead.
+        issue="$(work_title::_branch_key)"
+        [[ -n "${issue}" ]] || issue="$(work_title::_path_key)"
+        name=""
+        if [[ -n "${issue}" ]]; then
+          slug="$(work_title::_env_slug "${issue}")"
+          [[ -n "${slug}" ]] \
+            || name="$(work_title::_jira_summary "${issue}")" || name=""
+        fi
       fi
     fi
-    [[ -n "${name}" || -z "${issue}" ]] || slug="$(work_title::_env_slug "${issue}")"
   fi
 
   # No issue: the free text itself, or nothing.

@@ -71,8 +71,8 @@ shares a prefix and says what the work is. `/work:state-the-nature`,
 `/work:ready-room`, and `/work:make-it-so` give
 `ABC-123 · timecard sync drops overtime · triage`, `… · plan`, and
 `… · implement`, taking the issue from the prompt or, failing that, the
-branch or worktree path, and the name from Jira when the directory is
-inside a foreman project, else from the branch or workspace slug.
+branch or worktree path, and the name from the branch or workspace
+slug, else from Jira when the directory is inside a foreman project.
 `/pr:review` (or bare `/review`) gives
 `ABC-123 · timecard sync drops overtime · review → <repo>#<n>`, taking
 the issue from `--issue=<key>`, else the PR's title, else its branch

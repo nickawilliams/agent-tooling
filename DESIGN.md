@@ -544,12 +544,16 @@ collisions).
   since the bare `/make-it-so` belongs to the GitHub skill in some
   config dirs), else the one key in the branch name, else the one key
   in the last path components. Branch before path: directory names are
-  arbitrary, and one named for the branch adds nothing. The name is the
-  Jira summary when the cwd is inside a foreman project, fetched with
-  one REST call using the credentials `foreman config get` returns,
-  because a hook has no MCP; elsewhere it is the slug after the key in
-  the branch or workspace name, casing kept. A key Jira reports unknown (`utf-8`) is
-  free text. With no issue, the name is the first five words of a
+  arbitrary, and one named for the branch adds nothing. The name is
+  the slug after the key in the branch name, else in the workspace
+  name, casing kept: it was written as a name, it costs no network
+  call, and it is the same across every session of the issue,
+  including the review, which takes the PR's branch. Failing that
+  (usually a `plan` or `triage` session, before a workspace exists)
+  the Jira summary, when the cwd is inside a foreman project, fetched
+  with one REST call using the credentials `foreman config get`
+  returns, because a hook has no MCP. A key Jira reports unknown
+  (`utf-8`) is free text. With no issue, the name is the first five words of a
   free-text argument; a URL, a file, or no argument declines. The
   surroundings count whatever the argument is: `/state-the-nature the
   export button 500s` inside the `EX-1337` workspace triages that
