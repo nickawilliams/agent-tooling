@@ -76,8 +76,9 @@ inside a foreman project, else from the branch or workspace slug.
 `/pr:review` (or bare `/review`) gives
 `ABC-123 · timecard sync drops overtime · review → <repo>#<n>`, taking
 the issue from `--issue=<key>`, else the PR's title, else its branch
-name, and the name from the branch's slug, else the PR's title. An
-unknown field is dropped
+name, and the name from the branch's slug, else the PR's title.
+`/work:15five` gives `15five.check-in → 2026-09-25`, the Friday of the
+check-in's week. An unknown field is dropped
 (`dedupe vendor imports · plan`, `review → <repo>#<n>`). A name set with
 `/rename` is never overwritten. To name a session after the fact, run
 `/auto-title`: it replays the last skill invoked in the session, or the

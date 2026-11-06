@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+
+#?/name     auto-title — Session title fields for a 15Five check-in
+#?/version  1.0.0
+#?/synopsis auto-title < hook-payload.json
+#?/description
+ # Handler for the auto-title plugin, which runs it when a prompt
+ # invokes /work:15five or bare /15five. Prints the verb
+ # `15five.check-in` with the check-in's week as the target, which the
+ # plugin assembles into `15five.check-in → 2026-09-25`.
+ #
+ # 15Five weeks run Saturday to Friday and the archive lists them by
+ # range (`Sep 19 – Sep 25`), so the week is identified by its Friday,
+ # as an ISO date. The prompt's week comes in the forms the skill
+ # accepts: nothing or `this week` for the current week, `last week`,
+ # a date (`Sep 19`, `2026-09-19`, `9/19`), or a range, of which the
+ # last date counts. A date without a year is this year's unless that
+ # puts it more than two weeks ahead, then last year's. Any date is
+ # moved to the Friday of its week.
+ #
+ # Dates are handled in bash arithmetic, so neither GNU nor BSD `date`
+ # is needed beyond printing today. Needs bash and jq. No module-sh, as
+ # with every script a hook runs here.
+ ##
+
+set -uo pipefail
+
+readonly MONTHS=" jan feb mar apr may jun jul aug sep oct nov dec "
+readonly AHEAD_DAYS=14
+
+#@/private
+ # Convert a calendar date to a Julian day number.
+ #
+ # @operand <year>
+ # @operand <month>
+ # @operand <day>
+ #
+ # @stdout                 The day number
+ ##
+auto_title::_jdn() {
+  local y="${1}" m="${2}" d="${3}" a
+
+  a=$(( (14 - m) / 12 ))
+  y=$(( y + 4800 - a ))
+  m=$(( m + 12 * a - 3 ))
+  printf '%d' $(( d + (153 * m + 2) / 5 + 365 * y + y / 4 - y / 100 \
+    + y / 400 - 32045 ))
+}
+
+#@/private
+ # Convert a Julian day number to an ISO date.
+ #
+ # @operand <jdn>          The day number
+ #
+ # @stdout                 YYYY-MM-DD
+ ##
+auto_title::_date() {
+  local j="${1}" a b c d e m
+
+  a=$(( j + 32044 ))
+  b=$(( (4 * a + 3) / 146097 ))
+  c=$(( a - 146097 * b / 4 ))
+  d=$(( (4 * c + 3) / 1461 ))
+  e=$(( c - 1461 * d / 4 ))
+  m=$(( (5 * e + 2) / 153 ))
+  printf '%04d-%02d-%02d' $(( 100 * b + d - 4800 + m / 10 )) \
+    $(( m + 3 - 12 * (m / 10) )) $(( e - (153 * m + 2) / 5 + 1 ))
+}
+
+#@/private
+ # Print the Friday that ends the 15Five week holding a day.
+ #
+ # @operand <jdn>          The day number
+ #
+ # @stdout                 YYYY-MM-DD of that week's Friday
+ ##
+auto_title::_friday() {
+  local j="${1}" weekday
+
+  weekday=$(( (j + 1) % 7 ))   # 0 Sunday … 6 Saturday
+  if (( weekday == 6 )); then
+    auto_title::_date $(( j + 6 ))
+  else
+    auto_title::_date $(( j + 5 - weekday ))
+  fi
+}
+
+#@/private
+ # Print the month number for a month name, or nothing.
+ #
+ # @operand <name>         At least the first three letters, any case
+ #
+ # @stdout                 1–12
+ ##
+auto_title::_month() {
+  local name rest
+
+  name="$(printf '%s' "${1:0:3}" | tr '[:upper:]' '[:lower:]')"
+  rest="${MONTHS%% "${name}" *}"
+  [[ "${rest}" != "${MONTHS}" ]] && printf '%d' $(( ${#rest} / 4 + 1 ))
+  return 0
+}
+
+payload="$(cat)"
+
+command -v jq >/dev/null 2>&1 || exit 0
+
+prompt="$(jq -r '.prompt // empty' <<< "${payload}")"
+arg=""
+[[ "${prompt}" =~ ^/[^[:space:]]*[[:space:]]*(.*)$ ]] && arg="${BASH_REMATCH[1]}"
+arg="${arg//--draft-only/}"
+
+today="$(date +%Y-%m-%d)"
+[[ "${today}" =~ ^([0-9]{4})-([0-9]{2})-([0-9]{2})$ ]] || exit 0
+this_year=$(( 10#${BASH_REMATCH[1]} ))
+today_jdn="$(auto_title::_jdn "${this_year}" $(( 10#${BASH_REMATCH[2]} )) \
+  $(( 10#${BASH_REMATCH[3]} )))"
+
+# The last date in the argument wins, so a range yields its end. Each
+# form is tried on the text in turn; the match furthest right is kept.
+jdn=""
+text="${arg}"
+while [[ -n "${text}" ]]; do
+  y=""; m=""; d=""
+  if [[ "${text}" =~ ^([0-9]{4})-([0-9]{1,2})-([0-9]{1,2}) ]]; then
+    y=$(( 10#${BASH_REMATCH[1]} )); m=$(( 10#${BASH_REMATCH[2]} ))
+    d=$(( 10#${BASH_REMATCH[3]} ))
+  elif [[ "${text}" =~ ^([0-9]{1,2})/([0-9]{1,2})(/([0-9]{4}))? ]]; then
+    m=$(( 10#${BASH_REMATCH[1]} )); d=$(( 10#${BASH_REMATCH[2]} ))
+    y="${BASH_REMATCH[4]}"
+  elif [[ "${text}" =~ ^([A-Za-z]{3,9})\.?[[:space:]]+([0-9]{1,2})(st|nd|rd|th)?(,?[[:space:]]+([0-9]{4}))? ]]; then
+    m="$(auto_title::_month "${BASH_REMATCH[1]}")"
+    d=$(( 10#${BASH_REMATCH[2]} ))
+    y="${BASH_REMATCH[5]}"
+  fi
+  if [[ -n "${m}" && -n "${d}" ]] && (( m >= 1 && m <= 12 && d >= 1 && d <= 31 )); then
+    if [[ -z "${y}" ]]; then
+      y="${this_year}"
+      candidate="$(auto_title::_jdn "${y}" "${m}" "${d}")"
+      (( candidate > today_jdn + AHEAD_DAYS )) && y=$(( this_year - 1 ))
+    fi
+    jdn="$(auto_title::_jdn $(( 10#${y} )) "${m}" "${d}")"
+    text="${text#"${BASH_REMATCH[0]}"}"
+  else
+    text="${text#?}"
+  fi
+done
+
+if [[ -z "${jdn}" ]]; then
+  lower="$(printf '%s' "${arg}" | tr '[:upper:]' '[:lower:]')"
+  if [[ "${lower}" == *"last week"* || "${lower}" == *"previous week"* ]]; then
+    jdn=$(( today_jdn - 7 ))
+  elif [[ -z "${lower//[[:space:]]/}" || "${lower}" == *"this week"* \
+      || "${lower}" == *"current"* ]]; then
+    jdn="${today_jdn}"
+  else
+    exit 0   # a week the skill will have to work out itself
+  fi
+fi
+
+jq -nc --arg target "$(auto_title::_friday "${jdn}")" \
+  '{verb: "15five.check-in", target: $target}'
