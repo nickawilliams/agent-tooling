@@ -562,8 +562,11 @@ collisions).
   Friday and the archive lists them as ranges, so the week is named by
   its Friday as an ISO date, whatever form the prompt used (`last
   week`, `Sep 19`, `Sep 19 – Sep 25`, nothing for the current week).
-  The dates are worked out in bash arithmetic, so the handler needs
-  neither GNU nor BSD `date` beyond printing today.
+  Words that name no week are kept as the target verbatim, in quotes
+  (`15five.check-in → "the week after my vacation"`), so the session
+  is still findable by what was typed. The dates are worked out in
+  bash arithmetic, so the handler needs neither GNU nor BSD `date`
+  beyond printing today.
 - The three Jira lifecycle skills moved in on 2026-11-02 and call each
   other by full name (`/work:ready-room`, `work:state-the-nature`), so a
   later install can't take the names over. They drive the `foreman` CLI,

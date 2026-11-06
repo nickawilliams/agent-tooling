@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #?/name     auto-title — Session title fields for a 15Five check-in
-#?/version  1.0.0
+#?/version  1.1.0
 #?/synopsis auto-title < hook-payload.json
 #?/description
  # Handler for the auto-title plugin, which runs it when a prompt
@@ -16,7 +16,9 @@
  # a date (`Sep 19`, `2026-09-19`, `9/19`), or a range, of which the
  # last date counts. A date without a year is this year's unless that
  # puts it more than two weeks ahead, then last year's. Any date is
- # moved to the Friday of its week.
+ # moved to the Friday of its week. An argument that names no date and
+ # no relative week is kept as the target verbatim, in quotes, so the
+ # session is still findable by what was typed.
  #
  # Dates are handled in bash arithmetic, so neither GNU nor BSD `date`
  # is needed beyond printing today. Needs bash and jq. No module-sh, as
@@ -27,6 +29,7 @@ set -uo pipefail
 
 readonly MONTHS=" jan feb mar apr may jun jul aug sep oct nov dec "
 readonly AHEAD_DAYS=14
+readonly VERBATIM_MAX=40
 
 #@/private
  # Convert a calendar date to a Julian day number.
@@ -146,17 +149,27 @@ while [[ -n "${text}" ]]; do
   fi
 done
 
-if [[ -z "${jdn}" ]]; then
+target=""
+if [[ -n "${jdn}" ]]; then
+  target="$(auto_title::_friday "${jdn}")"
+else
   lower="$(printf '%s' "${arg}" | tr '[:upper:]' '[:lower:]')"
   if [[ "${lower}" == *"last week"* || "${lower}" == *"previous week"* ]]; then
-    jdn=$(( today_jdn - 7 ))
+    target="$(auto_title::_friday $(( today_jdn - 7 )))"
   elif [[ -z "${lower//[[:space:]]/}" || "${lower}" == *"this week"* \
       || "${lower}" == *"current"* ]]; then
-    jdn="${today_jdn}"
+    target="$(auto_title::_friday "${today_jdn}")"
   else
-    exit 0   # a week the skill will have to work out itself
+    # A week the skill will have to work out itself: keep the words,
+    # quoted so they read as a phrase in the session list.
+    verbatim="$(printf '%s' "${arg}" | tr -s '[:space:]' ' ')"
+    verbatim="${verbatim#"${verbatim%%[![:space:]]*}"}"
+    verbatim="${verbatim%"${verbatim##*[![:space:]]}"}"
+    verbatim="${verbatim//\"/}"
+    (( ${#verbatim} > VERBATIM_MAX )) \
+      && verbatim="${verbatim:0:VERBATIM_MAX-1}…"
+    target="\"${verbatim}\""
   fi
 fi
 
-jq -nc --arg target "$(auto_title::_friday "${jdn}")" \
-  '{verb: "15five.check-in", target: $target}'
+jq -nc --arg target "${target}" '{verb: "15five.check-in", target: $target}'
