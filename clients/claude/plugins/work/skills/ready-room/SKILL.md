@@ -1,15 +1,20 @@
 ---
 name: ready-room
-description: Get a Jira issue ready for `make-it-so` — starting from an existing issue key, a file, a free-text description, or nothing (a short Q&A) — have `state-the-nature` diagnose bugs that haven't been diagnosed yet, map the code seams for features, settle the approach, write or refine the issue in Jira after a single approval (an Epic with child issues when the work is too big for one PR), and gate it against what `make-it-so` needs. Outputs the issue key to hand to `make-it-so`. Use when asked to plan, scope, groom, refine, write up, or get work ready before implementation. For diagnosing a bug on its own, use `state-the-nature`.
+description: Get a Jira issue ready for `make-it-so` — starting from an existing issue key, a file, a free-text description, or nothing (a short Q&A) — have `state-the-nature` diagnose bugs that haven't been diagnosed yet, map the code seams for features, settle the approach, write or refine the issue in Jira after a single approval (an Epic with child issues when the work is too big for one PR), and gate it for readiness. Outputs the issue key to hand to `make-it-so`. Use when asked to plan, scope, groom, refine, write up, or get work ready before implementation. For diagnosing a bug on its own, use `state-the-nature`.
 argument-hint: "[issue-key | file | description]"
 ---
 
 Get the work described by $ARGUMENTS ready to implement, and finish
-by handing back one Jira issue key that `make-it-so` can take from
-open issue to merge-ready PR without stopping to ask what was meant.
-The output is the issue in Jira, not anything in this session: every
-finding and decision that `make-it-so` would need lands in the
-issue's description or comments, because those are what it reads.
+by handing back one Jira issue key. The issue is written for whoever
+implements it next — an engineer or an agent picking it up cold, with
+nothing but the issue — so they can take it from open to merge-ready
+PR without stopping to ask what was meant. The output is the issue in
+Jira, not anything in this session: every finding and decision an
+implementer would need lands in the issue's description or comments.
+
+The issue records the work: what's wrong or wanted, what was found,
+what was decided and why. How it was produced, and what to run next,
+belong in the session report, not in Jira.
 
 The work runs one fixed sequence (see Workflow). What varies is where
 it starts and how much each step has to do: a well-written story
@@ -35,8 +40,8 @@ text, not an error.
 
 **A key from the surroundings.** When the argument is not a key (seed
 text, a file, or nothing), look for one in the surroundings before
-going on, using the same method as `make-it-so` and preferring a key
-in the branch name over one found only in the path:
+going on, preferring a key in the branch name over one found only in
+the path:
 
 ```bash
 { git branch --show-current; pwd | tr '/' '\n' | tail -4; } \
@@ -73,9 +78,8 @@ investigation and the description template run.
 
 - **Bug track** — something behaves wrongly. Existing issues of type
   Bug, Internal Defect, or Hotfix; seed text that describes a failure,
-  an error, or a regression. Diagnosis belongs to the
-  `state-the-nature` skill (step 2); this skill picks up from its
-  verdict.
+  an error, or a regression. Diagnosis happens in step 2; this skill
+  picks up from its verdict.
 - **Feature track** — something new or better. Story, Task,
   Improvement, Exploration, Epic; seed text that describes a need or
   an idea.
@@ -131,8 +135,8 @@ knows Story, Bug, and Task, and sends the description as plain text.
   activity. Match the prefix convention of sibling issues in the same
   Epic when they have one (`Area :: Summary`).
 - **Lifecycle is not yours.** Never transition an issue, assign it,
-  or put it in a sprint unless the user asks — `foreman start` (via
-  `make-it-so`) moves it to In Progress.
+  or put it in a sprint unless the user asks — `foreman start` moves
+  it to In Progress when implementation begins.
 
 ### Description templates
 
@@ -203,11 +207,11 @@ one line each on what they deliver and what blocks what.
    them.
 
    - **Bug track:** if the issue already carries a diagnosis — a
-     reproduction plus a root cause or an explicit hypothesis, as
-     `state-the-nature` writes them — verify it still matches the
-     code and use it. Otherwise invoke the `work:state-the-nature`
-     skill with the Skill tool in embedded mode, passing the issue key or
-     the seed text and saying it was called from the ready room. It
+     reproduction plus a root cause or an explicit hypothesis —
+     verify it still matches the code and use it. Otherwise invoke
+     the `work:state-the-nature` skill with the Skill tool in
+     embedded mode, passing the issue key or the seed text and saying
+     it was called from the ready room. It
      returns a verdict, its drafted Jira changes, and the root cause
      and fix options. Carry the drafts into step 6 so the user
      approves once. Then:
@@ -215,10 +219,10 @@ one line each on what they deliver and what blocks what.
        starting point for step 4.
      - **Duplicate, not a bug, or cannot reproduce:** there's
        nothing to get ready. Skip to step 6 with only its drafted
-       changes, then report the verdict instead of a key to hand to
-       `make-it-so`.
-     - **Incident:** `state-the-nature` has already alerted the
-       user. Stop here until they say how to proceed.
+       changes, then report the verdict instead of a key to hand
+       off.
+     - **Incident:** the diagnosis has already alerted the user.
+       Stop here until they say how to proceed.
    - **Feature track:** map the seams the work will touch — the
      handlers, models, components, and tests involved, and how
      similar features were built. Find prior art and earlier
@@ -248,8 +252,8 @@ one line each on what they deliver and what blocks what.
    -maxdepth 2 -type d -iregex '.*/<KEY>([^0-9][^/]*)?'`) and open
    PRs. A likely duplicate is a decision point: show both and ask
    whether to merge into the existing issue, link them, or proceed.
-   On the bug track, `state-the-nature` has already checked for
-   duplicate defects; only the workspace and PR checks remain.
+   On the bug track, the diagnosis has already checked for duplicate
+   defects; only the workspace and PR checks remain.
 
 4. **Decide the approach.** Lay out the realistic options with their
    trade-offs — usually two or three, never a survey — and recommend
@@ -279,7 +283,7 @@ one line each on what they deliver and what blocks what.
    and present it in a single message: each issue to create (type,
    summary, parent, full description), each edit to an existing
    issue (a before/after of the changed sections), each comment, and
-   each link, including any changes drafted by `state-the-nature`
+   each link, including any changes the diagnosis step drafted
    (merged with yours where they touch the same issue, not listed
    twice). Then ask for approval once with AskUserQuestion. Write
    nothing to Jira before that approval; incorporate any revisions
@@ -287,8 +291,10 @@ one line each on what they deliver and what blocks what.
 
    When editing an issue someone else wrote, preserve their content:
    restructure it into the template and add to it, but don't drop or
-   reword their requirements. Record what the ready room changed and
-   decided as a comment as well, so the history shows it.
+   reword their requirements. Record the decisions made and the
+   reasoning behind each change in a comment as well, so the history
+   shows why the issue reads as it does. The comment is about the
+   work, not about who or what edited it; Jira records that itself.
 
    After approval, write in dependency order: Epic, then children
    (with `parent`), then edits, then links, then comments. Re-fetch
@@ -317,7 +323,7 @@ one line each on what they deliver and what blocks what.
    A failing check sends the work back to the step that owns it.
    Hand off only when every check passes, or when the user explicitly
    accepts a listed gap — the accepted gap is then written into the
-   issue so `make-it-so` sees it too.
+   issue so the implementer sees it too.
 
 8. **Hand off.** Finish with a short report: the issue key and URL,
    the track, the decisions made (yours and the user's), the

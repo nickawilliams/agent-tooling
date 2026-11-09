@@ -583,6 +583,19 @@ collisions).
   later install can't take the names over. They drive the `foreman` CLI,
   which must be on `PATH`. The GitHub-generic `make-it-so` in
   `~/.claude/skills` is still separate; reconciling the two is open.
+- The Jira content the three skills write is addressed to the
+  implementer, not to the next skill (2026-11-09). Before that, the
+  skills framed the issue as what `make-it-so` reads, kept a
+  division-of-labor note inside the bug template's Fix options slot,
+  and asked for a comment on what "the ready room" changed, and the
+  skill names showed up in descriptions and comments. Each skill now
+  names its reader as an engineer or agent reading the issue cold,
+  separates what the issue records (the work) from what the session
+  report records (the process and the next command), and words the
+  record-keeping comment around the decisions rather than the actor.
+  Names stay only where they are operative: the frontmatter, the
+  Skill tool call, and the next-step command in the user-facing
+  report.
 
 ### `mail-send-guard` hook
 

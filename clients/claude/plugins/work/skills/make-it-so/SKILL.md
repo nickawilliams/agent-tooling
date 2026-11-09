@@ -362,7 +362,10 @@ directly.
    deviations from the issue with rationale, verification
    performed, review findings fixed vs. declined, coverage gaps with
    reasons, remaining manual checks if any, and a link to the Jira
-   issue. GitHub closing keywords do nothing for Jira, so don't
+   issue. Write it as the reviewer will read it: about the change —
+   what it does, why, and how it was verified — not about the
+   procedure that produced it. GitHub closing keywords do nothing
+   for Jira, so don't
    write `Closes #`: the issue key in the title, branch, or body is
    what the Jira integration keys off. Then, from the worktree:
 

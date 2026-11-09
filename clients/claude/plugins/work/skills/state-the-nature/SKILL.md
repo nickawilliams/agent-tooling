@@ -7,13 +7,17 @@ argument-hint: "[issue-key | file | symptom]"
 Please state the nature of the medical emergency: diagnose the
 problem described by $ARGUMENTS and reach a verdict on it. This skill
 answers *what is wrong and why*. Deciding how to fix it, shaping the
-work, and checking it's ready to implement belong to
-`ready-room`; implementing it belongs to `make-it-so`.
+work, and implementing it are later steps with their own skills, and
+the diagnosis is written for whoever takes them: an engineer or an
+agent reading the issue cold.
 
 The output is a diagnosis recorded in Jira — on an existing issue or
 a new Bug or Internal Defect — plus a verdict. Anything learned that
 an implementer would need goes into the issue, because the session
-won't outlive it.
+won't outlive it. The issue records the defect: symptom,
+reproduction, cause, evidence, options. How the diagnosis was
+produced, and what to run next, belong in the session report, not in
+Jira.
 
 ## Modes
 
@@ -40,9 +44,8 @@ this order. Any words after an issue key are extra instructions.
 
 **A key from the surroundings.** When the argument is not a key (a
 file, a report, or nothing), look for one in the branch name first,
-then the working directory path, then this conversation, the same way
-`ready-room` does, and look for an error or stack trace pasted
-earlier in the conversation. Offer what you find ("Start from
+then the working directory path, then this conversation, and look for
+an error or stack trace pasted earlier in the conversation. Offer what you find ("Start from
 EX-123?") rather than assume it. Accepted alongside a report, the
 issue is context rather than subject: diagnose the report as a defect
 met in that issue's work, link the two, and still reach the verdict
@@ -125,7 +128,7 @@ next.
 
 ### Fix options
 The realistic fixes with their trade-offs, and which one the
-diagnosis points to. The decision is made in `ready-room`.
+diagnosis points to.
 
 ### Evidence
 Logs, traces, error-tracking links, queries run, and the
@@ -190,6 +193,9 @@ reword what they observed.
 
    Stop digging at the point where the cause is clear enough to
    choose a fix. Sketch the realistic fix options; don't pick one.
+   Choosing is the next step's decision, made with the user, and the
+   issue shouldn't say where that decision happens — only what the
+   options are.
 
 5. **Verdict.** Reach exactly one:
 
@@ -217,8 +223,8 @@ reword what they observed.
    symptom statement, the root cause (marked confirmed or
    hypothesis), the proposed type and priority, and what remains
    unknown. For a confirmed defect, the next step is
-   `/work:ready-room <KEY>` to decide the fix and get it ready for
-   `make-it-so`.
+   `/work:ready-room <KEY>` to decide the fix and get it ready to
+   implement.
 
 ## When to interrupt the user
 
