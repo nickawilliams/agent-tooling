@@ -10,14 +10,92 @@ argument is an issue number (with or without a leading `#`) or a full
 issue URL; any words after it are extra instructions to honor. If no
 issue was provided, ask for one before doing anything else.
 
+## Pushing
+
+Every push rebases the branch onto its base first, so a push is also
+what keeps the branch current with the branch it will merge into. The
+first push sets that baseline; every push after it keeps it. `<base>`
+is the branch this one merges into: the open PR's base once a PR
+exists (`gh pr list --head <branch> --state open --json baseRefName
+--jq '.[0].baseRefName'` — not `gh pr view`, which falls back to a
+merged or closed PR), else the branch it was cut from in step 2, else
+the default branch (`git ls-remote --symref origin HEAD`).
+A branch whose PR is already merged is done — stop rather than push;
+one whose PR was closed unmerged is a question for the user.
+
+1. **Preconditions.** The working tree is clean
+   (`git status --porcelain --untracked-files=no` prints nothing):
+   commit first, never autostash. No rebase, merge, or cherry-pick is
+   in progress (neither `$(git rev-parse --git-path rebase-merge)` nor
+   `rebase-apply` exists; `git rev-parse --quiet --verify MERGE_HEAD`
+   and `CHERRY_PICK_HEAD` both fail). The clone is not shallow
+   (`git rev-parse --is-shallow-repository` prints `false`; otherwise
+   `git fetch --unshallow origin` first).
+2. **Fetch.** `git fetch origin`, then the base by refspec so a
+   single-branch clone has it too:
+   `git fetch origin "+refs/heads/<base>:refs/remotes/origin/<base>"`.
+3. **Integrate the remote branch.** Skip on a first push, when
+   `origin/<branch>` doesn't exist. Otherwise, if
+   `git merge-base --is-ancestor origin/<branch> HEAD` fails, someone
+   added commits to the branch (a reviewer's suggestion, a bot) or
+   rewrote it: `git rebase origin/<branch>` puts yours on top of theirs
+   and drops any of yours they already carry. A conflict here is
+   `git rebase --abort`, then ask.
+4. **Rebase onto the base.** Note `git rev-parse HEAD` first, then:
+
+   ```bash
+   git rebase origin/<base> --no-rebase-merges --no-update-refs \
+     --no-autosquash --no-autostash
+   ```
+
+   The flags pin the behavior against the user's `rebase.*` config;
+   `--no-update-refs` matters because the default would drag other
+   stacked branches along. Merge commits on the branch linearize,
+   which is intended. An up-to-date branch is a no-op.
+5. **Conflicts.** Resolve one only when the resolution is mechanical
+   and plainly within the branch's intent — adjacent imports, a
+   renamed helper, a moved line. When upstream changed the seam the
+   branch builds on, or the resolution is a design choice,
+   `git rebase --abort` and ask; the branch is then exactly as it was.
+   Never stop with a rebase in progress. One conflict has a known
+   shape: a stacked branch whose parent was squash-merged with edits,
+   so the parent's own commits no longer apply. The fix is
+   `git rebase --onto origin/<base> origin/<old-parent>` while the
+   stale `origin/<old-parent>` still exists locally — propose it in
+   the question rather than guessing.
+6. **Re-verify** when HEAD moved in step 4 and an upstream commit
+   touched a file the branch touches (`git diff --name-only
+   "$(git merge-base ORIG_HEAD origin/<base>)" origin/<base>` against
+   `git diff --name-only origin/<base>...HEAD`): run the targeted
+   tests and the lint gate before pushing. CI runs the full suite
+   after. A no-op rebase skips this.
+7. **Push.**
+
+   ```bash
+   git push --force-with-lease --force-if-includes --set-upstream \
+     origin <branch>
+   ```
+
+   The bare lease is safe because step 3 ran against the fresh fetch,
+   and `--force-if-includes` refuses when the remote tip was never
+   integrated. Never use the `<ref>:<sha>` lease form, which disables
+   that check, and never retry with `--force`. A lease rejection means
+   the remote moved after the fetch: start again from step 2. A
+   rejection that names branch protection is a report, not something
+   to work around.
+
 ## Workflow
 
 1. **Pre-flight.** `git fetch` the remote. Verify the issue exists
    and is open — if it's closed or already has a merged PR, stop and
    ask. Check for an existing branch, open PR, or worktree for this
-   issue (`gh pr list --search "<N>"`, remote branch names,
-   `git worktree list`): if found, resume from where things stand
-   instead of starting over — never create a duplicate branch or PR.
+   issue (`gh pr list --search "<N>" --state all`, remote branch
+   names, `git worktree list`): if found, resume from where things
+   stand instead of starting over — never create a duplicate branch
+   or PR. Look PRs up with `gh pr list` and a `--state`, never
+   `gh pr view <branch>`, which quietly falls back to a merged or
+   closed PR when none is open. A closed, unmerged PR is a question
+   for the user.
    All work happens in a dedicated per-issue worktree, never in the
    user's checkout — this also keeps simultaneous invocations for
    different issues isolated from each other. If an existing
@@ -45,8 +123,13 @@ issue was provided, ask for one before doing anything else.
    and switches the session into it), or EnterWorktree with `path`
    to re-enter the issue's existing worktree when resuming. If the
    created branch name doesn't match the convention, rename it
-   before pushing. Read the docs the issue links to and enough of
-   the relevant code to map the real seams before writing anything.
+   before pushing. That default branch is the base for **Pushing** and
+   for the PR. When the extra instructions name a different base — a
+   release branch, or another issue's branch to stack on — point the
+   fresh branch at it before any work (`git reset --hard
+   origin/<base>`) and carry that name as `<base>` instead. Read the
+   docs the issue links to and enough of the relevant code to map the
+   real seams before writing anything.
    Issues are often written before the implementation existed —
    where the issue's plan doesn't match the code as built, adapt the
    plan to reality, and record each deviation with its rationale for
@@ -105,9 +188,11 @@ issue was provided, ask for one before doing anything else.
 
 5. **Commit and open the PR.** Split into logical commits following
    the repo's commit-message conventions (match recent history for
-   type/scope/phrasing). Push the branch. Create the PR titled per
-   the repo's or user's PR conventions (check CLAUDE.md/memory and
-   recent merged PRs); default to the issue's title verbatim.
+   type/scope/phrasing). Push per **Pushing**; this first push sets
+   the branch's baseline on its base. Create the PR with
+   `gh pr create --base <base>`, titled per the repo's or user's PR
+   conventions (check CLAUDE.md/memory and recent merged PRs);
+   default to the issue's title verbatim.
    Body: summary of what landed, any fixes the work flushed
    out, deviations from the issue with rationale, verification
    performed, remaining manual checks if any, `Closes #<N>`. Write
@@ -142,7 +227,8 @@ issue was provided, ask for one before doing anything else.
    review follow-ups); decline intentional trade-offs and non-issues
    with a stated reason. If a reviewer's suggested fix is right in
    spirit but wrong in mechanism, implement the correct mechanism and
-   say so. Re-run the full verification gate after fixes and push.
+   say so. Re-run the full verification gate after fixes and push
+   per **Pushing**.
 
 8. **Monitor to green — mandatory, not optional.** After every push
    (PR creation and any follow-up fixes), run `gh pr checks --watch`
@@ -153,7 +239,8 @@ issue was provided, ask for one before doing anything else.
    below) _and_ the Codecov pass below is resolved. A repo with no
    checks configured counts as green.
 
-   On failure: diagnose, fix, push, run `gh pr checks --watch` again.
+   On failure: diagnose, fix, push per **Pushing**, run `gh pr checks
+   --watch` again.
    Bound the loop: after two failed fix attempts on the same check,
    or a failure the diff can't explain (flaky infra, deployment gates,
    checks awaiting human approval), escalate instead of churning
@@ -182,7 +269,7 @@ issue was provided, ask for one before doing anything else.
 
    1. **Locate it.** The comment gives files and a miss count; a
       local coverage profile gives the lines. Cross-reference against
-      `git diff -U0 origin/<default>...HEAD` so you're judging diff
+      `git diff -U0 origin/<base>...HEAD` so you're judging diff
       lines rather than pre-existing gaps in the same file.
    2. **Judge each line** by step 4's bar — including its rule about
       tracing the real code path instead of guessing at reachability.
@@ -196,8 +283,8 @@ issue was provided, ask for one before doing anything else.
       A test that passes either way covers the line and asserts
       nothing — it buys a number, not a guarantee.
    4. **Re-run the full verification gate, push, and re-watch** —
-      both the status checks and Codecov's re-report against the new
-      head SHA.
+      the push per **Pushing**, then both the status checks and
+      Codecov's re-report against the new head SHA.
 
    Bound it like a failing check: after two rounds that don't move
    the number, escalate with what's left and why.
@@ -208,8 +295,10 @@ issue was provided, ask for one before doing anything else.
    investigation stays, with its reason in the PR body and the final
    report.
 
-9. **Stop at merge-ready.** Never merge, never enable auto-merge,
-   never force-push over others' work. Leave the worktree in place —
+9. **Stop at merge-ready.** Never merge, never enable auto-merge.
+   Force pushes happen only through **Pushing**: always leased, never
+   past a lease rejection, never after its step 3 asks. Leave the
+   worktree in place —
    don't ExitWorktree/remove it while the PR is unmerged; the
    session-exit prompt handles cleanup on the user's terms. Finish
    with a report: the PR URL, what shipped, deviations taken, review
