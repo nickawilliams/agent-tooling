@@ -103,6 +103,82 @@ expected side effects. Beyond them, the Jira issue is read-only to
 you — never transition it, comment on it, or edit its fields
 directly.
 
+## Pushing
+
+Every push rebases the branch onto its base first, so a push is also
+what keeps the branch current with the branch it will merge into. The
+first push sets that baseline; every push after it keeps it. `<base>`
+is the branch this one merges into: the open PR's base once a PR
+exists (`gh pr list --head <branch> --state open --json baseRefName
+--jq '.[0].baseRefName'` — not `gh pr view`, which falls back to a
+merged or closed PR), else the branch it was cut from in step 2, else
+what `foreman review` would target: the repo's `pull_request.base` in
+the foreman config, or the default branch (`git ls-remote --symref
+origin HEAD`).
+A branch whose PR is already merged is done — stop rather than push;
+one whose PR was closed unmerged is a question for the user.
+
+1. **Preconditions.** The working tree is clean
+   (`git status --porcelain --untracked-files=no` prints nothing):
+   commit first, never autostash. No rebase, merge, or cherry-pick is
+   in progress (neither `$(git rev-parse --git-path rebase-merge)` nor
+   `rebase-apply` exists; `git rev-parse --quiet --verify MERGE_HEAD`
+   and `CHERRY_PICK_HEAD` both fail). The clone is not shallow
+   (`git rev-parse --is-shallow-repository` prints `false`; otherwise
+   `git fetch --unshallow origin` first).
+2. **Fetch.** `git fetch origin`, then the base by refspec so a
+   single-branch clone has it too:
+   `git fetch origin "+refs/heads/<base>:refs/remotes/origin/<base>"`.
+3. **Integrate the remote branch.** Skip on a first push, when
+   `origin/<branch>` doesn't exist. Otherwise, if
+   `git merge-base --is-ancestor origin/<branch> HEAD` fails, someone
+   added commits to the branch (a reviewer's suggestion, a bot) or
+   rewrote it: `git rebase origin/<branch>` puts yours on top of theirs
+   and drops any of yours they already carry. A conflict here is
+   `git rebase --abort`, then ask.
+4. **Rebase onto the base.** Note `git rev-parse HEAD` first, then:
+
+   ```bash
+   git rebase origin/<base> --no-rebase-merges --no-update-refs \
+     --no-autosquash --no-autostash
+   ```
+
+   The flags pin the behavior against the user's `rebase.*` config;
+   `--no-update-refs` matters because the default would drag other
+   stacked branches along. Merge commits on the branch linearize,
+   which is intended. An up-to-date branch is a no-op.
+5. **Conflicts.** Resolve one only when the resolution is mechanical
+   and plainly within the branch's intent — adjacent imports, a
+   renamed helper, a moved line. When upstream changed the seam the
+   branch builds on, or the resolution is a design choice,
+   `git rebase --abort` and ask; the branch is then exactly as it was.
+   Never stop with a rebase in progress. One conflict has a known
+   shape: a stacked branch whose parent was squash-merged with edits,
+   so the parent's own commits no longer apply. The fix is
+   `git rebase --onto origin/<base> origin/<old-parent>` while the
+   stale `origin/<old-parent>` still exists locally — propose it in
+   the question rather than guessing.
+6. **Re-verify** when HEAD moved in step 4 and an upstream commit
+   touched a file the branch touches (`git diff --name-only
+   "$(git merge-base ORIG_HEAD origin/<base>)" origin/<base>` against
+   `git diff --name-only origin/<base>...HEAD`): run the targeted
+   tests and the lint gate before pushing. CI runs the full suite
+   after. A no-op rebase skips this.
+7. **Push.**
+
+   ```bash
+   git push --force-with-lease --force-if-includes --set-upstream \
+     origin <branch>
+   ```
+
+   The bare lease is safe because step 3 ran against the fresh fetch,
+   and `--force-if-includes` refuses when the remote tip was never
+   integrated. Never use the `<ref>:<sha>` lease form, which disables
+   that check, and never retry with `--force`. A lease rejection means
+   the remote moved after the fetch: start again from step 2. A
+   rejection that names branch protection is a report, not something
+   to work around.
+
 ## Workflow
 
 1. **Pre-flight.** Fetch the issue from Jira with the Atlassian MCP
@@ -124,10 +200,12 @@ directly.
      reason to stop.
 
    Then check whether work is already underway for this issue
-   (`gh pr list --search "<KEY>"`, commits on the branch): if so,
-   resume from where things stand instead of starting over, and
-   never open a duplicate PR. Uncommitted changes you didn't make
-   are the user's — ask before building on top of them.
+   (`gh pr list --search "<KEY>" --state all`, commits on the
+   branch): if so, resume from where things stand instead of
+   starting over, and never open a duplicate PR. A PR already merged
+   means the issue shipped — stop and say so; one closed without
+   merging is a question for the user. Uncommitted changes you
+   didn't make are the user's — ask before building on top of them.
 
    **Readiness check.** When starting fresh (not resuming), read the
    description and comments for questions the issue leaves open
@@ -195,7 +273,12 @@ directly.
    ```
 
    It branches from the repo's default branch, names the branch from
-   the issue title, and moves the issue to In Progress.
+   the issue title, and moves the issue to In Progress. That default
+   branch is the base for **Pushing** and for the PR. When the extra
+   instructions name a different base — a release branch, or another
+   issue's branch to stack on — run the command from a checkout of
+   that branch with `--from-head` (`foreman workspace create` takes
+   it too) and carry that name as `<base>` instead.
 
    Always pass `--slug <slug>` rather than letting foreman slugify the
    full title, which yields unwieldy branch and workspace names. Write
@@ -296,7 +379,7 @@ directly.
    a deliberate audit rather than a number.
 
    Either way, cross-reference the report against the changed lines
-   (`git diff origin/<default>...HEAD`); a whole-project percentage
+   (`git diff origin/<base>...HEAD`); a whole-project percentage
    is not diff coverage. Uncovered diff lines in low-value
    categories are acceptable without comment:
    straightforward delegations, unreachable error returns, logging/UI
@@ -321,17 +404,18 @@ directly.
 
 6. **Commit and push.** Split into logical commits following the
    repo's commit-message conventions (match recent history for
-   type/scope/phrasing). Push the branch — foreman won't push for
-   you, and skips any repo whose branch has no remote head.
+   type/scope/phrasing). Push per **Pushing**; this first push sets
+   the branch's baseline on its base. Foreman won't push for you, and
+   skips any repo whose branch has no remote head.
 
 7. **Independent review — before the PR exists.** Opening the PR
    requests the team's review and, where the project's foreman config
    says so, announces it in Slack, so the self-review comes first.
    Spawn a subagent with a completely fresh context to review the
    pushed branch. Give it only: the worktree
-   path, the branch and its base (`origin/<default>`), the Jira
+   path, the branch and its base (`origin/<base>`), the Jira
    issue key, and instructions to be adversarial, read the full diff
-   (`git diff origin/<default>...HEAD`) plus surrounding code,
+   (`git diff origin/<base>...HEAD`) plus surrounding code,
    verify claims empirically (run the tests itself), and report
    findings ranked by severity with file:line and concrete failure
    scenarios. Do not share your own conclusions with it. Explicitly
@@ -348,7 +432,8 @@ directly.
    review follow-ups); decline intentional trade-offs and non-issues
    with a stated reason. If a reviewer's suggested fix is right in
    spirit but wrong in mechanism, implement the correct mechanism and
-   say so. Re-run the full verification gate after fixes and push.
+   say so. Re-run the full verification gate after fixes and push
+   per **Pushing**.
 
 9. **Open the PR with foreman.** First confirm no PR is already open
    for the branch (`gh pr list --head <branch> --state open`). If
@@ -371,9 +456,13 @@ directly.
 
    ```bash
    foreman review --issue <KEY> --workspace <workspace> \
-     --repository <repo> \
+     --repository <repo> --base <base> \
      --body "$(cat <scratch-path>)" --approve
    ```
+
+   `--base` is the `<base>` from **Pushing**. Left out, foreman
+   targets its configured `pull_request.base` or the default branch,
+   which is wrong for a stacked branch.
 
    Leave the title to foreman's `code_host.pr.title_template`
    (`[<KEY>] <issue summary>`) — that is the team convention — and
@@ -406,7 +495,8 @@ directly.
     close it by asserting nothing, excluding the file in
     `codecov.yaml`, or lowering the target.
 
-    On failure: diagnose, fix, push, run `gh pr checks --watch` again.
+    On failure: diagnose, fix, push per **Pushing**, run `gh pr checks
+    --watch` again.
     Bound the loop: after two failed fix attempts on the same check,
     or a failure the diff can't explain (flaky infra, deployment gates,
     checks awaiting human approval), escalate instead of churning
@@ -415,8 +505,10 @@ directly.
     with a reason; don't ignore them. Don't re-run `foreman review`
     after follow-up pushes; the open PR picks them up.
 
-11. **Stop at merge-ready.** Never merge, never enable auto-merge,
-    never force-push over others' work. Leave the workspace in place:
+11. **Stop at merge-ready.** Never merge, never enable auto-merge.
+    Force pushes happen only through **Pushing**: always leased,
+    never past a lease rejection, never after its step 3 asks. Leave
+    the workspace in place:
     teardown is `foreman cleanup`, and it's the user's to run after
     merge — don't remove branches or worktrees, and don't run any
     other foreman lifecycle command (`preview`, `prerelease`,

@@ -596,6 +596,20 @@ collisions).
   Names stay only where they are operative: the frontmatter, the
   Skill tool call, and the next-step command in the user-facing
   report.
+- Every push in `make-it-so` rebases the branch onto its base first
+  (2026-11-09): the first push sets the baseline and each push after
+  keeps it, with `--force-with-lease --force-if-includes`. The base is
+  the open PR's base once a PR exists, else the branch the skill cut
+  from, else what the PR tool would target; nothing is stored, since
+  before the PR the session knows the base and after it GitHub does.
+  Rebasing on every push rather than at milestones keeps conflicts
+  small; a conflict that isn't mechanical aborts and asks, so the
+  branch is never left mid-rebase. The one accepted degradation: a
+  stacked branch whose parent was squash-merged with edits conflicts
+  on the parent's commits, and the fix (`--onto` from the stale
+  parent ref) is proposed rather than applied. The GitHub-generic
+  `make-it-so` carries the same section; the two remain otherwise
+  unreconciled.
 
 ### `mail-send-guard` hook
 
