@@ -110,7 +110,10 @@ issue was provided, ask for one before doing anything else.
    recent merged PRs); default to the issue's title verbatim.
    Body: summary of what landed, any fixes the work flushed
    out, deviations from the issue with rationale, verification
-   performed, remaining manual checks if any, `Closes #<N>`.
+   performed, remaining manual checks if any, `Closes #<N>`. Write
+   it as the reviewer will read it: about the change — what it does,
+   why, and how it was verified — not about the procedure that
+   produced it.
 
 6. **Independent review.** Spawn a subagent with a completely fresh
    context to review the PR. Give it only: repo path, PR number,
