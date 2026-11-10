@@ -1,14 +1,15 @@
 ---
 name: make-it-so
 description: Take a GitHub issue from open to merge-ready PR autonomously — branch, implement, verify, commit, PR, isolated subagent review, CI monitoring, Codecov diff-coverage follow-through. Interrupts only at genuine decision points. Use when asked to ship, start-to-finish, fully work, or "make it so" for an issue by number.
-argument-hint: <issue-number>
+argument-hint: <issue-number> [--slug <slug>]
 ---
 
 Take issue $ARGUMENTS from open issue to merge-ready PR, working
 autonomously except at genuine decision points (defined below). The
 argument is an issue number (with or without a leading `#`) or a full
-issue URL; any words after it are extra instructions to honor. If no
-issue was provided, ask for one before doing anything else.
+issue URL; `--slug <slug>` after it names the branch (see step 2), and
+any other words after it are extra instructions to honor. If no issue
+was provided, ask for one before doing anything else.
 
 ## Pushing
 
@@ -107,17 +108,15 @@ one whose PR was closed unmerged is a question for the user.
    from the repo's branch-naming convention — check CLAUDE.md/memory,
    CONTRIBUTING, and recent branch names (`git branch -r`, merged PR
    head refs); default to `<N>-<slug>` when no convention is
-   evident. Whatever the convention, write the slug yourself rather
-   than slugifying the full issue title: lowercase, hyphen-separated,
-   aiming for 5 words or fewer and never more than 6 unless the issue
-   genuinely can't be named in fewer. Keep the distinctive nouns and
-   the core verb; drop articles, filler ("a", "the", "and", "for",
-   "of"), and words the issue number or repo already implies. Preserve
-   an outline prefix like `A.` or `Part 1:` as the slug's leading
-   segment (`a-`, `part-1-`), since it keeps sibling issues sorted and
-   scannable; it doesn't count toward the word limit. For example,
+   evident. Whatever the convention, the slug inside it is the one
+   the user passed as `--slug`, exactly as typed; otherwise invoke
+   `/auto-title:slug <issue title>` (the `auto-title` plugin must be
+   installed) and use its one line of output verbatim. Never write
+   the slug yourself: the same rules name the session, so the branch
+   and the session title carry the same words. For example,
    "A. Create the configuration schema and transition view" →
-   `a-config-schema-transition-view`. Enter the work area with Claude Code's native worktree
+   `a-create-configuration-schema-transition-view`.
+   Enter the work area with Claude Code's native worktree
    support: EnterWorktree with that name (creates the worktree under
    `.claude/worktrees/` on a fresh branch from `origin/<default>`
    and switches the session into it), or EnterWorktree with `path`
