@@ -85,7 +85,8 @@ to every skill this section runs:
   sweeps it; review mode passes it to `pr:review`, which marks the PR's
   post. Without it, discovery checks only GitHub review requests, and a
   review marks no post: discovery's step 4 catches the post up on a later
-  run instead.
+  run instead. A routine has no `foreman` and no plugin settings, so
+  `--channel` is the only source here.
 
 ### Check `gh` first, in both modes
 

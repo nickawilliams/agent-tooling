@@ -449,10 +449,15 @@ refactor, not a plain move.
   for the event it submits with, flipped on later watch rounds. Every
   write reads the post first and is a no-op when the post is already
   right, since `sweep` and `automate` reach the same post. The channel is
-  the same `slack_channel` setting, overridable with `--channel`, which
-  `sweep` and `automate` pass through. `sweep` uses the same three names
-  and its resolution pass is now the catch-up for reviews submitted
-  outside `review`. *Open:* the connector has no remove-reaction tool, so
+  the first of `--channel`, the foreman project the cwd is in
+  (`foreman config get notification.channels.review`, the channel
+  `foreman review` announces in; per project, so it outranks the
+  user-wide setting), and the `slack_channel` setting. `sweep` resolves
+  it the same way and passes it to each review; `automate` passes it
+  explicitly, since a routine has neither foreman nor plugin settings.
+  `sweep` uses the same three names and its resolution pass is now the
+  catch-up for reviews submitted outside `review`. *Open:* the connector
+  has no remove-reaction tool, so
   a flipped outcome leaves the old reaction on the post until it is
   removed by hand; the skill names it. Revisit when the connector gains
   one, or if the stale reactions prove annoying enough to warrant a Slack

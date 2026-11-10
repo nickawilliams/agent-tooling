@@ -18,7 +18,7 @@ failure worth engineering around.
 | Argument     | Default         | Meaning                                                                                       |
 | ------------ | --------------- | --------------------------------------------------------------------------------------------- |
 | `slack` or `github` | both     | Positional. Sweep only that source.                                                           |
-| `--channel`  | plugin setting  | Slack channel to sweep, with or without the leading `#`. Overrides the setting below and is passed to `pr:review`. |
+| `--channel`  | foreman, else plugin setting | Slack channel to sweep, with or without the leading `#`. Overrides the sources below and is passed to `pr:review`. |
 | `--days`     | 7               | How far back to look for _new_ Slack posts. Bounds Slack discovery only. GitHub requests and resolution in stage 6 ignore it. |
 | `--limit`    | 5               | Most PRs to review in one run. Held-back PRs are named in the digest.                         |
 | `--comments` | `post`          | Passed to `pr:review`. `none` makes the run a dry run.                                        |
@@ -27,15 +27,22 @@ failure worth engineering around.
 
 ### The Slack channel
 
-The configured channel is `${user_config.slack_channel}`, from the `pr`
-plugin's `slack_channel` setting. `--channel` overrides it.
+The channel is the first of these that yields a value, with or without the
+leading `#`: `--channel`; then the foreman project the working directory
+is in, when `foreman` is on `PATH`, read with
+`foreman config get notification.channels.review` (prints the value and
+exits 0, else exits 1); then `${user_config.slack_channel}`, the `pr`
+plugin's `slack_channel` setting. This is the order `pr:review` uses, for
+the same reason: foreman's value is per project and names the channel
+`foreman review` announces PRs in.
 
-If `--channel` wasn't passed and that value is empty, or still reads as a
-literal `${user_config…}` placeholder (as it does when this file is read
-directly rather than loaded as a plugin skill), there is no channel. Skip
-the Slack source, keep going with GitHub, and say in the digest that Slack
-was skipped, naming `--channel` and the plugin's `slack_channel` setting.
-When only `slack` was requested and there is no channel, stop and say so.
+If none yields a value, or the setting still reads as a literal
+`${user_config…}` placeholder (as it does when this file is read directly
+rather than loaded as a plugin skill), there is no channel. Skip the Slack
+source, keep going with GitHub, and say in the digest that Slack was
+skipped, naming `--channel`, the foreman key, and the plugin's
+`slack_channel` setting. When only `slack` was requested and there is no
+channel, stop and say so.
 
 ## 1. Find candidates
 
@@ -283,7 +290,9 @@ reviewed (Slack only), closed, merged, unreadable.
 **Newly marked resolved**: with the outcome applied.
 
 **Sources**: if Slack was skipped for want of a channel, say so, naming
-`--channel` and the `slack_channel` setting.
+`--channel`, foreman's `notification.channels.review`, and the
+`slack_channel` setting. Otherwise name which of the three supplied the
+channel.
 
 Say the count of reviews left pending and unsubmitted, since nothing in
 this skill submits them unless `--comments=submit` was passed. Submitting

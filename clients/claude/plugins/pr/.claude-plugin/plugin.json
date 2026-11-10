@@ -9,7 +9,7 @@
     "slack_channel": {
       "type": "string",
       "title": "Slack PR channel",
-      "description": "Channel where pull request links are posted, e.g. bb-prs. /pr:sweep checks it for PRs awaiting review; /pr:review marks the post linking the PR with reactions. Leave empty to skip Slack."
+      "description": "Channel where pull request links are posted, e.g. bb-prs. /pr:sweep checks it for PRs awaiting review; /pr:review marks the post linking the PR with reactions. Used when the working directory is not inside a foreman project that sets notification.channels.review. Leave empty to skip Slack elsewhere."
     }
   }
 }

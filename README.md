@@ -42,8 +42,10 @@ other items are extracted into it only once a second client uses them
 | `relay` | `/dispatch`, `/pickup` |
 | `work` | `/standup`, `/15five`, `/state-the-nature`, `/ready-room`, `/make-it-so` |
 
-`/pr:review` and `/pr:sweep` read their Slack channel from the plugin's
-`slack_channel` setting (in `/config`); `--channel` overrides it on either.
+`/pr:review` and `/pr:sweep` take their Slack channel from `--channel`,
+else the foreman project the working directory is in (its
+`notification.channels.review`, the channel `foreman review` announces
+PRs in), else the plugin's `slack_channel` setting (in `/config`).
 `/pr:review` marks the post linking the PR with `:eyes:` when it starts
 and with `:white_check_mark:`, `:requested-changes:`, or `:repeat:` once a
 review is submitted, flipping the outcome as later rounds change it.

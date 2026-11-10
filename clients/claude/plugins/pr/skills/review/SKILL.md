@@ -1126,15 +1126,38 @@ review is the work; the reaction is a courtesy to the channel.
 
 ### The channel
 
-The channel is `--channel=<name>`, with or without the leading `#`, else
-`${user_config.slack_channel}` from the `pr` plugin's `slack_channel`
-setting.
+The channel is the first of these that yields a value, with or without the
+leading `#`:
 
-If neither is set, or the setting still reads as a literal `${user_config…}`
-placeholder (as it does when this file is read by path rather than loaded as
-a plugin skill), there is no channel. Skip everything in this section, and
-say so once in the output, naming `--channel` and the `slack_channel`
-setting. Nothing else about the review changes.
+1. `--channel=<name>` on the prompt.
+2. The foreman project the working directory is in, when `foreman` is on
+   `PATH`. Its `notification.channels.review` is the channel
+   `foreman review` announces PRs in, which is the post this section marks:
+
+   ```bash
+   foreman config get notification.channels.review
+   ```
+
+   It prints the bare value and exits 0. Outside a project, or with the key
+   unset, it exits 1 with the reason on stderr; either way, move on to the
+   next source. Foreman finds its project by walking up from the working
+   directory, so this names the project being worked in, not necessarily
+   the PR's. A review run from inside one project's checkout against
+   another project's PR gets the wrong channel; pass `--channel` there.
+3. `${user_config.slack_channel}`, the `pr` plugin's `slack_channel`
+   setting.
+
+Foreman's value comes before the setting because it is per project, and the
+setting is one value for every repository. Setting both to the same channel
+makes no difference.
+
+If none yields a value, or the setting still reads as a literal
+`${user_config…}` placeholder (as it does when this file is read by path
+rather than loaded as a plugin skill), there is no channel. Skip everything
+in this section, and say so once in the output, naming `--channel`, the
+foreman key, and the `slack_channel` setting. Nothing else about the review
+changes. When there is a channel, the one-line Slack note names which
+source supplied it.
 
 ### Finding the post
 
