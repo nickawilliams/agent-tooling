@@ -37,7 +37,7 @@ other items are extracted into it only once a second client uses them
 
 | Plugin | Skills |
 |---|---|
-| `auto-title` | `/auto-title` |
+| `auto-title` | `/auto-title`, `/auto-title:slug` |
 | `pr` | `/pr:review`, `/pr:address`, `/pr:sweep`, `/pr:automate` |
 | `relay` | `/dispatch`, `/pickup` |
 | `work` | `/standup`, `/15five`, `/state-the-nature`, `/ready-room`, `/make-it-so` |
@@ -67,20 +67,27 @@ any plugin opts in with an executable named `auto-title` beside its
 `SKILL.md`; it gets the prompt payload on stdin and prints the title's
 fields as JSON (or a finished title), or nothing to decline. Titles read
 `<issue> · <name> · <verb>`, so every session for one piece of work
-shares a prefix and says what the work is. `/work:state-the-nature`,
+shares a prefix and says what the work is. The name is the slug of the
+issue's or PR's title by one fixed rule (a leading key or `Area ::`
+dropped, an outline prefix such as `A.` kept, stopwords removed, five
+words at most, hyphenated), or the slug already in the branch or
+workspace name, verbatim. `/auto-title:slug <title>` prints that slug,
+and `/make-it-so` names branches with it, so a branch and the sessions
+for its issue carry the same words; `--slug <slug>` on `/make-it-so`
+overrides both. `/work:state-the-nature`,
 `/work:ready-room`, and `/work:make-it-so` give
-`ABC-123 · timecard sync drops overtime · triage`, `… · plan`, and
+`ABC-123 · timecard-sync-drops-overtime · triage`, `… · plan`, and
 `… · implement`, taking the issue from the prompt or, failing that, the
 branch or worktree path, and the name from the branch or workspace
-slug, else from Jira when the directory is inside a foreman project.
-`/pr:review` (or bare `/review`) gives
-`ABC-123 · timecard sync drops overtime · review → <repo>#<n>`, taking
+slug, else `--slug`, else from Jira when the directory is inside a
+foreman project. `/pr:review` (or bare `/review`) gives
+`ABC-123 · timecard-sync-drops-overtime · review → <repo>#<n>`, taking
 the issue from `--issue=<key>`, else the PR's title, else its branch
 name, and the name from the branch's slug, else the PR's title.
 `/work:15five` gives `15five.check-in → 2026-W39`, the ISO week of the
 check-in, and `/work:standup` gives `standup → 2026-11-06`, the
 reference day. An unknown field is dropped
-(`dedupe vendor imports · plan`, `review → <repo>#<n>`). A name set with
+(`dedupe-vendor-imports · plan`, `review → <repo>#<n>`). A name set with
 `/rename` is never overwritten. To name a session after the fact, run
 `/auto-title`: it replays the last skill invoked in the session, or the
 one you give it (`/auto-title /pr:review 3442`), and sets the title even
@@ -112,6 +119,9 @@ or whatever `CLAUDE_CONFIG_DIR` points at).
    claude plugin install relay@nickawilliams
    claude plugin install work@nickawilliams
    ```
+
+   `work` declares `auto-title` as a dependency, so installing it alone
+   pulls `auto-title` in.
 
 3. Link the global instructions (as the config dir's `CLAUDE.md`) and the
    linked skills, hooks, and output styles (such as `/recall`, the

@@ -357,13 +357,18 @@ next to the thing it sets up:
 - **Overlay merging.** File-by-file replacement was favored over merging
   inside a file. A common `SKILL.md` can link to a file only the overlay
   supplies.
-- **Plugin-private versus shared items.** Likely rule: an item lives inside
-  its plugin unless it is portable or shared. A plugin that needs another
-  plugin's skill can invoke it by full name and declare a `dependencies`
-  entry, so sharing doesn't force a build step. The other direction, a
-  plugin offering a capability others opt into, has one instance: a file
-  convention the offering plugin discovers, with no dependency either way
-  (see [`auto-title`](#auto-title-plugin)).
+- **Plugin-private versus shared items.** Rule, with one instance of
+  each direction: an item lives inside its plugin unless it is portable
+  or shared. A plugin that needs another plugin's skill invokes it by
+  full name and declares a `dependencies` entry in its manifest (Claude
+  Code installs the dependency with the plugin), so sharing doesn't
+  force a build step; `work`'s `make-it-so` invokes `/auto-title:slug`
+  this way since 2026-11-09, and the personal `make-it-so`, which has
+  no manifest, states the requirement in its text. The other direction,
+  a plugin offering a capability others opt into, is a file convention
+  the offering plugin discovers, with no dependency either way (see
+  [`auto-title`](#auto-title-plugin)). What stays open is a shared
+  *file* rather than a skill: nothing needs one yet.
 - **An `automate` convention.** Candidate: a plugin with automation exposes
   an `automate` skill with `install` (default), `doctor`, `off`, and
   `task`, the recurring entry point a routine invokes. Named for the idea
@@ -428,8 +433,8 @@ refactor, not a plain move.
   a short list of look-alikes (`UTF-8`, `CVE-…`) is skipped. `--issue`
   is in the skill's argument hint for that purpose alone and plays no
   part in the review. The name is the slug after the key in the PR's
-  branch name, hand-written to be short and kept in its own casing,
-  else the PR's title. The PR is the first
+  branch name, verbatim, else the PR's title, slugified by the plugin
+  (see [one slug](#auto-title-plugin)). The PR is the first
   operand: a number for the current checkout's repo, or
   `<owner>/<repo>#<n>` or a PR URL from any directory, forms the skill
   accepts too since 2026-11-06 (`pr:sweep` already passed the first).
@@ -546,15 +551,20 @@ collisions).
   in the last path components. Branch before path: directory names are
   arbitrary, and one named for the branch adds nothing. The name is
   the slug after the key in the branch name, else in the workspace
-  name, casing kept: it was written as a name, it costs no network
+  name, verbatim: it was written as a name, it costs no network
   call, and it is the same across every session of the issue,
-  including the review, which takes the PR's branch. Failing that
+  including the review, which takes the PR's branch. Failing that, a
+  `--slug` typed on the prompt (since 2026-11-09), which is the name
+  `make-it-so` will give the branch. Failing that
   (usually a `plan` or `triage` session, before a workspace exists)
   the Jira summary, when the cwd is inside a foreman project, fetched
   with one REST call using the credentials `foreman config get`
-  returns, because a hook has no MCP. A key Jira reports unknown
-  (`utf-8`) is free text. With no issue, the name is the first five words of a
-  free-text argument; a URL, a file, or no argument declines. The
+  returns, because a hook has no MCP; the plugin slugifies it by the
+  rule `make-it-so` names the branch with, so the two agree. A key
+  Jira reports unknown
+  (`utf-8`) is free text. With no issue, the name is the typed slug or
+  the free-text argument, which the plugin cuts to five words; a URL,
+  a file, or no argument declines. The
   surroundings count whatever the argument is: `/state-the-nature the
   export button 500s` inside the `EX-1337` workspace triages that
   symptom on `EX-1337`, and `ready-room` and `state-the-nature` were
@@ -721,44 +731,73 @@ for rules that aren't skills; none exist.
   and fetches the title, and no operand declines.
 
 **Title format.** `[<issue> · ]<name> · <verb>[ → <target>]`, settled
-2026-11-06 by iterating on a mock session list:
+2026-11-06 by iterating on a mock session list, with the name as a
+hyphenated slug since 2026-11-09:
 
 ```
-EX-1337 · timecard sync drops overtime · triage
-EX-1337 · timecard sync drops overtime · plan
-EX-1337 · timecard sync drops overtime · implement
-EX-1337 · timecard sync drops overtime · review → api#3442
-dedupe vendor imports · plan
+EX-1337 · timecard-sync-drops-overtime · triage
+EX-1337 · timecard-sync-drops-overtime · plan
+EX-1337 · timecard-sync-drops-overtime · implement
+EX-1337 · timecard-sync-drops-overtime · review → api#3442
+dedupe-vendor-imports · plan
 ```
 
 The issue leads because the session list is opened to find a piece of
 work, not a kind of session; with it first, every session for an issue
 shares a prefix across its lifecycle and across the repos its PRs land
 in. The name follows because a bare key says nothing about the work: it
-is the issue's or PR's title as a lowercase slug with spaces, so the key
-stays the only uppercase landmark, or a branch's own slug with its
-casing kept, since someone already wrote that as a name. The verb comes
-last, lowercase, from
+is the slug of the issue's or PR's title, lowercase, so the key stays
+the only uppercase landmark, or the slug already in the branch or
+workspace name, verbatim, since someone already wrote that as a name.
+The verb comes last, lowercase, from
 one small vocabulary (`triage`, `plan`, `implement`, `review`), not the
 skill's name and not a noun; a target follows it only where one issue
 can have several sessions of the same kind, as reviews do, one per PR.
 The middle dot separates fields because the hyphen already appears
 inside keys and slugs, and the arrow reads as "acting on". An unknown
 field is dropped with no placeholder and the order is kept
-(`review → api#456`, `dedupe vendor imports · plan`). The plugin
+(`review → api#456`, `dedupe-vendor-imports · plan`). The plugin
 assembles the title from the handler's fields, so the format lives in
-one place: it slugifies the name, strips a leading key or `Area ::`
-prefix from it, requires an issue, a name, or a target, and fits the
-title to 80 characters by shortening the name at a word boundary, never
-the issue, verb, or target. The earlier format was `<issue> <verb>
-[<qualifier>]` (2026-11-04). Two things the format doesn't attempt:
-sorting as text (keys and verbs don't, and `/resume` orders by
+one place: it slugifies the name, requires an issue, a name, or a
+target, and fits the title to 80 characters by shortening the name at a
+hyphen, never the issue, verb, or target. The earlier formats were
+`<issue> <verb> [<qualifier>]` (2026-11-04) and the same fields with the
+name as a spaced slug (2026-11-06). Two things the format doesn't
+attempt: sorting as text (keys and verbs don't, and `/resume` orders by
 recency), and a table view (a mod can't restyle the `/resume` picker; a
 separate pane could, parked).
 
+**One slug** (2026-11-09). The name and the branch used to be made
+twice: the plugin lowercased the whole title and spaced it, keeping
+every word, while `make-it-so` wrote a branch slug by prose rules (five
+words, drop filler, keep an outline prefix) the model applied by
+judgment. So the first session for an issue got the long title, every
+later one got the branch's slug back, and the two never matched. Now
+one deterministic rule, a jq definition in the plugin script, makes
+both: drop a leading issue reference (`EX-1337:`, `[EX-1337]`, `#123`)
+and an `Area ::` prefix; lift an outline prefix (`A.`, `3)`, `Part 1:`)
+to lead the slug untouched; delete apostrophes; lowercase and split on
+everything else; drop a fixed stopword list from the body unless that
+would empty it; keep the first five body words; join with hyphens.
+"A. Create the configuration schema and transition view" gives
+`a-create-configuration-schema-transition-view`. The title is that slug
+as is, dashes included: one output form, no reverse mapping, and the
+session list can be searched for a branch name. Determinism costs the
+model's abbreviation and its sense of which nouns matter; `--slug
+<slug>` on the `make-it-so` prompt is the override, used as typed for
+the branch and, read by the handlers, for the title. The rule reaches
+the skills as `auto-title slug <text>`, behind the model-invocable
+`/auto-title:slug` skill: the `work` plugin declares the dependency in
+its manifest, the personal skill states it, and both tell the model to
+use the printed slug verbatim and never write one. A branch or
+workspace slug read back from the environment is still used verbatim,
+so a hand-named branch keeps its name. `check`, beside the script,
+exercises the rule, the format, and the override by hand.
+
 **Mechanics.** One script, `auto-title`, with hook modes `index`
-(`SessionStart`, every source) and `prompt` (`UserPromptSubmit`), and a
-`status` mode behind the `/auto-title` skill. `index` runs
+(`SessionStart`, every source) and `prompt` (`UserPromptSubmit`), a
+`status` mode behind the `/auto-title` skill, and a `slug` mode behind
+`/auto-title:slug`. `index` runs
 `claude plugin list --json`, the documented enumeration (about 0.6s,
 once per session), keeps entries enabled here (project and local scope
 only when the cwd is inside their `projectPath`; `enabled` alone is not
