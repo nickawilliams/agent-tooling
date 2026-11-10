@@ -1,14 +1,15 @@
 ---
 name: make-it-so
 description: Take a Jira issue to a merge-ready GitHub PR — set up the branch and worktree with `foreman start` (or use the one already checked out), implement, verify, commit, push, run an isolated subagent review, open the PR with `foreman review`, then monitor CI to green. Infers the issue key from the branch or worktree path when none is given. Autonomous, interrupting only at genuine decision points. Use when asked to ship, start-to-finish, fully work, or "make it so" for a Jira issue.
-argument-hint: "[issue-key]"
+argument-hint: "[issue-key] [--slug <slug>]"
 ---
 
 Take Jira issue $ARGUMENTS from open issue to merge-ready GitHub PR,
 working autonomously except at genuine decision points (defined
 below). The argument is a Jira issue key (`ABC-123`, any case) or a
-full Jira issue URL; any words after it are extra instructions to
-honor.
+full Jira issue URL; `--slug <slug>` after it names the branch and
+workspace (see step 2), and any other words after it are extra
+instructions to honor.
 
 **Resolving the issue key.** When no key is given, derive it rather
 than asking. Collect candidates from the current branch name and
@@ -281,20 +282,17 @@ one whose PR was closed unmerged is a question for the user.
    it too) and carry that name as `<base>` instead.
 
    Always pass `--slug <slug>` rather than letting foreman slugify the
-   full title, which yields unwieldy branch and workspace names. Write
-   the slug yourself: lowercase, hyphen-separated, aiming for 5 words
-   or fewer and never more than 6 unless the issue genuinely can't be
-   named in fewer. Keep the distinctive nouns and the core verb; drop
-   articles, filler ("a", "the", "and", "for", "of"), and words the
-   issue key or repo already implies. Preserve an outline prefix like
-   `A.` or `Part 1:` as the slug's leading segment (`a-`, `part-1-`),
-   since it keeps sibling issues sorted and scannable; it doesn't
-   count toward the word limit. Examples:
+   full title, which yields unwieldy branch and workspace names. The
+   slug is the one the user passed as `--slug`, exactly as typed;
+   otherwise invoke `/auto-title:slug <issue summary>` and use its one
+   line of output verbatim. Never write the slug yourself: the same
+   rules name the session, so the branch, the workspace, and the
+   session title carry the same words. Examples:
 
    - "A. Create the configuration schema and transition view" →
-     `a-config-schema-transition-view`
+     `a-create-configuration-schema-transition-view`
    - "Timecard sync improvements for the payroll integration" →
-     `timecard-sync-improvements`
+     `timecard-sync-improvements-payroll-integration`
 
    When the user wants a new workspace alongside an existing one,
    `foreman start` can't make it: it always reuses the issue's
@@ -302,8 +300,8 @@ one whose PR was closed unmerged is a question for the user.
    pass `--workspace` doesn't work — `start` ignores that flag).
    Use `foreman workspace create` with a branch name distinct from
    the existing workspace's, following the same `<KEY>-<slug>`
-   pattern and the same slug length rules as above (ask the user for
-   the slug if nothing distinguishes the attempts):
+   pattern with the slug from `--slug` (ask the user for one if
+   nothing distinguishes the attempts):
 
    ```bash
    foreman workspace create <KEY>-<slug> <repo> --project <root> \

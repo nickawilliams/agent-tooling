@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #?/name     auto-title.sh — Title fields for the Jira lifecycle skills
-#?/version  2.0.0
+#?/version  2.1.0
 #?/synopsis source "${BASH_SOURCE[0]%/*}/../../lib/auto-title.sh"
 #?/description
  # Sourced by the auto-title handlers beside make-it-so, ready-room, and
@@ -9,7 +9,7 @@
  # work_title::run with its verb. The run reads the UserPromptSubmit
  # payload, resolves the issue and its name, and prints the title fields
  # as JSON for the auto-title plugin to assemble into
- # `EX-1337 · timecard sync drops overtime · implement`. Printing nothing
+ # `EX-1337 · timecard-sync-drops-overtime · implement`. Printing nothing
  # declines.
  #
  # Resolution order, the same for all three skills. The issue is the
@@ -17,11 +17,14 @@
  # /browse/ URL, else the single key in the branch name, else the single
  # key in the last components of the working directory; make-it-so also
  # takes a plain number as a GitHub issue. The name is the slug after
- # the key in the branch name, else in the workspace name, which keeps
- # its own casing and is the same across every session of the issue;
- # else the issue's Jira summary, for sessions that start before a
- # workspace exists. Without an issue, the name is the first words of a
- # free-text argument; a URL, a file path, or no argument gives no title.
+ # the key in the branch name, else in the workspace name, which is the
+ # same across every session of the issue; else a `--slug` typed on the
+ # prompt, which make-it-so will name the branch with; else the issue's
+ # Jira summary, for sessions that start before a workspace exists,
+ # which the plugin slugifies by the same rules make-it-so names
+ # branches with. Without an issue, the name is the typed slug or the
+ # free-text argument; a URL, a file path, or no argument gives no
+ # title.
  #
  # The Jira lookup is opportunistic: a hook has no MCP, so when the
  # working directory is inside a foreman project this reads the tracker
@@ -42,9 +45,6 @@ readonly WORK_TITLE_KEY_PATTERN='(^|[^A-Za-z0-9])([A-Za-z]{2,10}-[0-9]+)'
 
 # Prefixes that look like project keys and aren't.
 readonly WORK_TITLE_NOT_KEYS=" UTF SHA ISO HTTP TLS SSL CVE RFC PEP MD UTC "
-
-# How many words of a free-text argument make a name.
-readonly WORK_TITLE_NAME_WORDS=5
 
 #@/private
  # Print every Jira key in a string, upper-cased, one per line.
@@ -238,26 +238,25 @@ work_title::_github_title() {
 }
 
 #@/private
- # Print the first words of a free-text argument, or nothing.
+ # Print a free-text argument as a name, or nothing.
  #
  # A URL or an existing file is not free text: naming a session after
- # either gives gibberish, so the caller declines instead.
+ # either gives gibberish, so the caller declines instead. The text is
+ # passed whole; the plugin drops its stopwords and caps the words.
  #
  # @operand <argument>     The whole argument
  #
- # @stdout                 Up to WORK_TITLE_NAME_WORDS words
+ # @stdout                 The argument, or nothing
  ##
 work_title::_text_name() {
   local arg="${1}" path
-  local -a words
 
   [[ -n "${arg}" ]] || return 0
   [[ "${arg}" =~ ^[A-Za-z][A-Za-z0-9+.-]*:// ]] && return 0
   path="${arg/#\~/${HOME}}"
   [[ -f "${path}" ]] && return 0
 
-  read -r -a words <<< "${arg}"
-  printf '%s' "${words[*]:0:${WORK_TITLE_NAME_WORDS}}"
+  printf '%s' "${arg}"
 }
 
 #@/public
@@ -277,7 +276,8 @@ work_title::_text_name() {
  ##
 work_title::run() {
   local verb="${1}" numbers=0
-  local payload prompt arg operand issue="" name="" slug="" from_operand=0 rc
+  local payload prompt arg operand issue="" name="" slug="" typed=""
+  local from_operand=0 rc
 
   [[ "${2:-}" == "--numbers" ]] && numbers=1
   payload="$(cat)"
@@ -285,6 +285,16 @@ work_title::run() {
 
   prompt="$(jq -r '.prompt // empty' <<< "${payload}")"
   arg="$(work_title::_argument "${prompt}")"
+
+  # A typed `--slug <slug>` is the name make-it-so will give the branch,
+  # so it is the name here too. It is lifted out of the argument so it
+  # never reads as the operand or as free text.
+  if [[ "${arg}" =~ (^|[[:space:]])--slug[=[:space:]]+([^[:space:]]+) ]]; then
+    typed="${BASH_REMATCH[2]}"
+    arg="${arg/"${BASH_REMATCH[0]}"/ }"
+    arg="${arg#"${arg%%[![:space:]]*}"}"
+    arg="${arg%"${arg##*[![:space:]]}"}"
+  fi
   operand="${arg%%[[:space:]]*}"
 
   # Issue: operand, then branch, then path.
@@ -298,11 +308,13 @@ work_title::run() {
   [[ -n "${issue}" ]] || issue="$(work_title::_path_key)"
 
   # Name: the slug beside the key in the branch or workspace, else the
-  # tracker's title.
+  # typed slug, else the tracker's title.
   if [[ "${issue}" == "#"* ]]; then
-    name="$(work_title::_github_title "${issue#\#}")"
+    slug="${typed}"
+    [[ -n "${slug}" ]] || name="$(work_title::_github_title "${issue#\#}")"
   elif [[ -n "${issue}" ]]; then
     slug="$(work_title::_env_slug "${issue}")"
+    [[ -n "${slug}" ]] || slug="${typed}"
     if [[ -z "${slug}" ]]; then
       name="$(work_title::_jira_summary "${issue}")"
       rc=$?
@@ -321,10 +333,11 @@ work_title::run() {
     fi
   fi
 
-  # No issue: the free text itself, or nothing.
+  # No issue: the typed slug, else the free text itself, else nothing.
   if [[ -z "${issue}" ]]; then
-    name="$(work_title::_text_name "${arg}")"
-    [[ -n "${name}" ]] || return 0
+    slug="${typed}"
+    [[ -n "${slug}" ]] || name="$(work_title::_text_name "${arg}")"
+    [[ -n "${slug}${name}" ]] || return 0
   fi
 
   jq -nc --arg issue "${issue}" --arg name "${name}" --arg slug "${slug}" \

@@ -5,6 +5,7 @@
     "name": "nickawilliams"
   },
   "repository": "https://github.com/nickawilliams/agent-tooling",
+  "dependencies": ["auto-title"],
   "userConfig": {
     "work_email": {
       "type": "string",
