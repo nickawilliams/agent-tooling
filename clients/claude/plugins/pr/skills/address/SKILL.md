@@ -296,7 +296,39 @@ anything that explains what the original code does.
 
 When every item is processed, run the full test suite for the affected
 packages, then present the final list in the **TRIAGE** step 4 format with
-every status updated.
+every status updated. Then re-request reviews (below).
+
+### Re-request reviews
+
+A reviewer whose feedback is fully handled gets asked to look again, so
+the PR doesn't sit on a stale "changes requested". Read each reviewer's
+latest review and the current requests:
+
+```bash
+gh pr view {pr_number} --json latestReviews,reviewRequests,author
+```
+
+Re-request a reviewer when all of these hold:
+
+- They're a human: not a bot, not you, not the PR author. Bots re-review
+  on push by themselves.
+- Their latest review is `CHANGES_REQUESTED` or `COMMENTED`, not
+  `APPROVED`, and they aren't already in `reviewRequests`.
+- Every inline thread they started is now resolved; a deferred thread
+  counts as unresolved. A review whose summary asks for changes with no
+  inline thread counts as handled only once a PR comment answers it.
+- The fixes are on the remote: the branch has no unpushed commits
+  (`git rev-list --count @{upstream}..HEAD` prints `0`). This skill
+  doesn't push, so when commits are unpushed, name the reviewers that
+  would be re-requested and say they wait for the push.
+
+```bash
+gh api --method POST \
+  repos/{owner}/{repo}/pulls/{pr_number}/requested_reviewers \
+  -f 'reviewers[]=<login>'
+```
+
+Report who was re-requested, and who wasn't and why.
 
 ---
 
