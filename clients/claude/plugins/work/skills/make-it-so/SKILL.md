@@ -520,8 +520,26 @@ one whose PR was closed unmerged is a question for the user.
     checks awaiting human approval), escalate instead of churning
     commits. If human review comments arrive while watching, triage
     them under the same protocol as step 8 — address them or respond
-    with a reason; don't ignore them. Don't re-run `foreman review`
-    after follow-up pushes; the open PR picks them up.
+    with a reason; don't ignore them. Read review summaries as well
+    as inline threads: a summary can request changes with no thread
+    attached. Don't re-run `foreman review` after follow-up pushes;
+    the open PR picks them up.
+
+    Once a round of follow-ups is pushed, re-request review from
+    each human reviewer (not a bot, not you) whose latest review is
+    `CHANGES_REQUESTED` or `COMMENTED` and who isn't already
+    requested, when every inline thread they started is resolved and
+    any changes their review summary asked for are answered in a PR
+    comment:
+
+    ```bash
+    gh api --method POST \
+      repos/<owner>/<repo>/pulls/<number>/requested_reviewers \
+      -f 'reviewers[]=<login>'
+    ```
+
+    This needs no confirmation. Name who was re-requested in the
+    final report.
 
 11. **Stop at merge-ready.** Never merge, never enable auto-merge.
     Force pushes happen only through **Pushing**: always leased,
