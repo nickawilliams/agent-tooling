@@ -1,0 +1,194 @@
+#!/usr/bin/env bash
+
+#?/name     check — Exercise the slug rules and the title format
+#?/version  1.0.0
+#?/synopsis check [slug|format|override]
+#?/description
+ # Table-driven checks for the plugin script beside this file. `slug`
+ # runs the slug rules over known titles, `format` feeds `prompt` a
+ # stub handler and reads the title back, and `override` sends a typed
+ # `--slug` through the work plugin's resolver, found beside this
+ # plugin in a checkout. Bare `check` runs all three. There is no
+ # harness in the repo yet, so this runs by hand.
+ ##
+
+# shellcheck disable=SC1091  # module-sh is on PATH, not beside this file
+source module
+
+set -uo pipefail
+
+CHECK_PLUGIN="$(cd "${BASH_SOURCE[0]%/*}" && pwd -P)"
+readonly CHECK_PLUGIN
+readonly CHECK_SCRIPT="${CHECK_PLUGIN}/auto-title"
+readonly CHECK_WORK_LIB="${CHECK_PLUGIN}/../work/lib/auto-title.sh"
+
+CHECK_FAILED=0
+
+#@/private
+ # Compare an outcome with the expectation and report it.
+ #
+ # @operand <label>        What was checked
+ # @operand <expected>     The expected text
+ # @operand <actual>       The text produced
+ #
+ # @sets    CHECK_FAILED   Incremented on a mismatch
+ #
+ # @stdout                 One line per check, more on a mismatch
+ ##
+check::_expect() {
+  local label="${1}" expected="${2}" actual="${3}"
+
+  if [[ "${expected}" == "${actual}" ]]; then
+    printf 'ok    %s\n' "${label}"
+  else
+    printf 'FAIL  %s\n      expected: %s\n      actual:   %s\n' \
+      "${label}" "${expected}" "${actual}"
+    CHECK_FAILED=$(( CHECK_FAILED + 1 ))
+  fi
+}
+
+#@/private
+ # Run `prompt` against a stub handler that prints one given line.
+ #
+ # @operand <line>         The handler's line, JSON fields or plain text
+ #
+ # @stdout                 The session title the hook set, or nothing
+ ##
+check::_title() {
+  local line="${1}" tmp payload
+
+  tmp="$(mktemp -d)"
+  mkdir -p "${tmp}/sessions"
+  # shellcheck disable=SC2016  # the stub expands STUB_LINE itself
+  printf '#!/usr/bin/env bash\ncat "${STUB_LINE}"\n' > "${tmp}/stub"
+  chmod +x "${tmp}/stub"
+  printf '%s' "${line}" > "${tmp}/line"
+  jq -n --arg run "${tmp}/stub" '{generated: "x", session_id: "s1",
+    cwd: "/", disabled: false, problems: [], plugins: 1,
+    rules: [{plugin: "p", skill: "stub", run: $run,
+             patterns: ["^/stub([[:space:]]|$)"]}]}' \
+    > "${tmp}/sessions/s1.json"
+  payload='{"prompt": "/stub", "cwd": "/", "session_id": "s1"}'
+
+  STUB_LINE="${tmp}/line" CLAUDE_PLUGIN_DATA="${tmp}" \
+    "${CHECK_SCRIPT}" prompt <<< "${payload}" \
+    | jq -r '.hookSpecificOutput.sessionTitle // empty'
+  rm -rf "${tmp}"
+}
+
+#@/subcommand slug
+ # Run the slug rules over known titles.
+ #
+ # @stdout                 One line per case
+ #
+ # @exit    0              Every case matched
+ # @exit    1              A case failed
+ ##
+check::slug() {
+  local input expected actual
+
+  while IFS='|' read -r input expected; do
+    [[ -n "${input}" ]] || continue
+    actual="$("${CHECK_SCRIPT}" slug "${input}")" || actual="<exit $?>"
+    check::_expect "slug: ${input}" "${expected}" "${actual}"
+  done <<'CASES'
+Timecard sync improvements for the payroll integration|timecard-sync-improvements-payroll-integration
+EX-1337: Fix the overtime drop in timecard sync|fix-overtime-drop-timecard-sync
+A. Create the configuration schema and transition view|a-create-configuration-schema-transition-view
+Part 1: Migrate the build to ESLint 10|part-1-migrate-build-eslint-10
+eslint: Adopt ESLint 10|eslint-adopt-eslint-10
+Billing :: Don't double-charge on retry|dont-double-charge-retry
+#123: Add the thing|add-thing
+[EX-12] The of and|the-of-and
+EX-12|<exit 1>
+3) Phase two cleanup of the migration scripts|3-phase-two-cleanup-migration-scripts
+B. The sync and the payroll|b-sync-payroll
+a config schema|config-schema
+X-ray support for scans|x-ray-support-scans
+one two three four five six seven|one-two-three-four-five
+CASES
+  (( CHECK_FAILED == 0 ))
+}
+
+#@/subcommand format
+ # Feed `prompt` a stub handler and read the title back.
+ #
+ # @stdout                 One line per case
+ #
+ # @exit    0              Every case matched
+ # @exit    1              A case failed
+ ##
+check::format() {
+  local line expected
+
+  while IFS='|' read -r line expected; do
+    [[ -n "${line}" ]] || continue
+    check::_expect "format: ${line}" "${expected}" "$(check::_title "${line}")"
+  done <<'CASES'
+{"issue":"EX-1337","name":"EX-1337: Fix the overtime drop in timecard sync","verb":"implement"}|EX-1337 · fix-overtime-drop-timecard-sync · implement
+{"issue":"EX-1337","slug":"My-Typed-Slug","verb":"review","target":"api#3442"}|EX-1337 · My-Typed-Slug · review → api#3442
+{"name":"dedupe the vendor imports for the build","verb":"plan"}|dedupe-vendor-imports-build · plan
+{"issue":"EX-1","name":"Area :: A. Create the configuration schema and transition view","verb":"implement"}|EX-1 · a-create-configuration-schema-transition-view · implement
+{"issue":"EX-1","slug":"a-very-long-hand-written-slug-that-goes-on-and-on-and-on-and-on-past-eighty-chars","verb":"implement"}|EX-1 · a-very-long-hand-written-slug-that-goes-on-and-on-and-on-and · implement
+{"issue":"EX-1","verb":"implement"}|EX-1 · implement
+{"verb":"review","target":"api#3442"}|review → api#3442
+{"name":"EX-12","verb":"plan"}|
+plain text title|plain text title
+CASES
+  (( CHECK_FAILED == 0 ))
+}
+
+#@/subcommand override
+ # Send a typed `--slug` through the work plugin's resolver.
+ #
+ # Needs the work plugin beside this one, as in a checkout; skipped
+ # otherwise. Runs in an empty directory so no branch or path supplies
+ # an issue or a slug.
+ #
+ # @stdout                 One line per case
+ #
+ # @exit    0              Every case matched, or the check was skipped
+ # @exit    1              A case failed
+ ##
+check::override() {
+  local tmp prompt expected actual
+
+  if [[ ! -f "${CHECK_WORK_LIB}" ]]; then
+    printf 'skip  override: no work plugin beside this one\n'
+    return 0
+  fi
+  tmp="$(mktemp -d)"
+
+  while IFS='|' read -r prompt expected; do
+    [[ -n "${prompt}" ]] || continue
+    actual="$(cd "${tmp}" && jq -nc --arg prompt "${prompt}" '{prompt: $prompt}' \
+      | bash -c 'source "$1"; work_title::run implement --numbers' \
+          _ "${CHECK_WORK_LIB}")"
+    check::_expect "override: ${prompt}" "${expected}" "${actual}"
+  done <<'CASES'
+/make-it-so 123 --slug my-name extra words|{"issue":"#123","name":"","slug":"my-name","verb":"implement"}
+/make-it-so --slug=typed-one some free text|{"issue":"","name":"","slug":"typed-one","verb":"implement"}
+/make-it-so dedupe the vendor imports|{"issue":"","name":"dedupe the vendor imports","slug":"","verb":"implement"}
+CASES
+  rm -rf "${tmp}"
+  (( CHECK_FAILED == 0 ))
+}
+
+#@/command
+ # Run every check.
+ #
+ # @stdout                 One line per case
+ #
+ # @exit    0              Every case matched
+ # @exit    1              A case failed
+ ##
+check() {
+  check::slug
+  check::format
+  check::override
+  if (( CHECK_FAILED > 0 )); then
+    printf '%d check(s) failed\n' "${CHECK_FAILED}" >&2
+    return 1
+  fi
+  printf 'all checks passed\n'
+}
