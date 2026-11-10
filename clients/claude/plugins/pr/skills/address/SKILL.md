@@ -247,20 +247,10 @@ above, plus this instruction:
 > `tests_passed` (bool).
 
 After it returns, close out the thread (below), set the item to **fixed**
-with its short SHA, and confirm before moving on:
-
-```
-question: "Fix applied (commit <short_sha>). Continue to the next item?"
-header: "Next item"
-options:
-  - label: "Continue"
-    description: "Move on to the next fix"
-  - label: "Stop here"
-    description: "End the session; remaining items stay open"
-multiSelect: false
-```
-
-Mention in the description if tests failed or the close-out failed.
+with its short SHA, and move straight on to the next item. Choosing
+**Fix** at step 4 approved the whole set, so don't confirm between
+items. Stop only when a fix's tests fail or its close-out fails: report
+what failed, and leave the remaining items open.
 
 Don't batch unrelated fixes into one commit.
 
