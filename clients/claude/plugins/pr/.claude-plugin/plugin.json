@@ -9,7 +9,7 @@
     "slack_channel": {
       "type": "string",
       "title": "Slack PR channel",
-      "description": "Channel /pr:sweep checks for pull request links, e.g. bb-prs. Leave empty to use GitHub review requests only."
+      "description": "Channel where pull request links are posted, e.g. bb-prs. /pr:sweep checks it for PRs awaiting review; /pr:review marks the post linking the PR with reactions. Leave empty to skip Slack."
     }
   }
 }

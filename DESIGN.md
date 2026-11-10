@@ -379,6 +379,8 @@ next to the thing it sets up:
     is a placeholder and a proxy attaches credentials per request. Check
     with a real call such as `gh api user`.
   - claude.ai connectors (Slack) work, including writes such as reactions.
+    The connector adds and lists reactions but has no remove tool
+    (checked 2026-11-10).
   - A routine can be created with `RemoteTrigger` (via `/schedule`), but
     the API trigger and its token were added in the web UI; the create call
     takes no trigger fields. The server also jitters the cron minute.
@@ -442,6 +444,19 @@ refactor, not a plain move.
   means the current branch's open PR. One REST call fetches the
   number, title, and branch. REST, because the cloud GitHub proxy
   rejects GraphQL and with it `gh pr view`.
+- `review` marks the PR's Slack post (2026-11-10): `:eyes:` when it
+  starts, then `:white_check_mark:`, `:requested-changes:`, or `:repeat:`
+  for the event it submits with, flipped on later watch rounds. Every
+  write reads the post first and is a no-op when the post is already
+  right, since `sweep` and `automate` reach the same post. The channel is
+  the same `slack_channel` setting, overridable with `--channel`, which
+  `sweep` and `automate` pass through. `sweep` uses the same three names
+  and its resolution pass is now the catch-up for reviews submitted
+  outside `review`. *Open:* the connector has no remove-reaction tool, so
+  a flipped outcome leaves the old reaction on the post until it is
+  removed by hand; the skill names it. Revisit when the connector gains
+  one, or if the stale reactions prove annoying enough to warrant a Slack
+  token and `reactions.remove` by hand.
 
 Phases, each committed to `main` on its own and leaving things working:
 

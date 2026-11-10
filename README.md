@@ -42,8 +42,13 @@ other items are extracted into it only once a second client uses them
 | `relay` | `/dispatch`, `/pickup` |
 | `work` | `/standup`, `/15five`, `/state-the-nature`, `/ready-room`, `/make-it-so` |
 
-`/pr:sweep` reads its Slack channel from the plugin's `slack_channel`
-setting (in `/config`). Leave it empty to sweep GitHub review requests only.
+`/pr:review` and `/pr:sweep` read their Slack channel from the plugin's
+`slack_channel` setting (in `/config`); `--channel` overrides it on either.
+`/pr:review` marks the post linking the PR with `:eyes:` when it starts
+and with `:white_check_mark:`, `:requested-changes:`, or `:repeat:` once a
+review is submitted, flipping the outcome as later rounds change it.
+`/pr:sweep` finds unreviewed PRs there and catches up posts whose reviews
+were submitted elsewhere. Leave the setting empty to skip Slack.
 
 `work` asks for its settings at install (work email, Slack user ID, Jira
 site, standup channel and calendar events, repo globs, a session

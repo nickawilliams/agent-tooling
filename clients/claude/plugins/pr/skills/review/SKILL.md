@@ -1,7 +1,7 @@
 ---
 name: review
 description: Review a pull request. Use when the user runs /pr:review, asks to review a PR, or wants feedback on changes in a pull request.
-argument-hint: "[pr-number | owner/repo#n | pr-url] [--issue=<key>] [--comments=<none|post|submit>] [--level=<severity>] [--watch=<off|on>] [--fresh]"
+argument-hint: "[pr-number | owner/repo#n | pr-url] [--issue=<key>] [--channel=<name>] [--comments=<none|post|submit>] [--level=<severity>] [--watch=<off|on>] [--fresh]"
 ---
 
 Review pull request $ARGUMENTS and produce a review in two stages: build a
@@ -118,6 +118,11 @@ is not a decision and is never asked for: it exists so the session can be
 titled by issue when the PR's title and branch don't carry the key. It
 plays no part in resolving the PR or in the review itself.
 
+`--channel=<name>` names the Slack channel whose post for this PR gets
+reactions, overriding the `pr` plugin's `slack_channel` setting. Like
+`--issue`, it is not a decision and is never asked for. See **The Slack
+post**.
+
 Then collect metadata and the diff:
 
 ```bash
@@ -131,6 +136,12 @@ the PR is already merged/closed. Do not proceed with the review.
 
 Record `headRefOid` as the reviewed sha. A review is only valid for one
 commit, and naming it lets a later run tell whether the PR has moved.
+
+Then mark the PR's Slack post with `:eyes:`, as **The Slack post**
+describes. It comes after the merged/closed check, so a PR that will not
+be reviewed is not marked as being looked at, and before the diff is read,
+so the mark is up while the review runs rather than after it. With no
+channel, skip it.
 
 ## 2. Read beyond the diff
 
@@ -966,6 +977,13 @@ Submitting requires an event; there is no publish-without-verdict. Map
 Always end the response with the review URL as a markdown link on its own line:
 `https://github.com/<owner>/<repo>/pull/<n>#pullrequestreview-<review_id>`.
 
+Once the submit call succeeds, set the Slack post's outcome reaction from
+the event, as **The Slack post** describes. Do it before resolving threads
+and before starting a watcher, so a Slack failure is reported in this
+response rather than lost behind them. Under `post`, the post keeps
+`:eyes:` alone: a pending review is not an outcome anyone in the channel
+can see.
+
 ### Resolve addressed threads
 
 Under `post` and `submit`, resolve every `addressed` entry in
@@ -1068,6 +1086,10 @@ network blip does not read as a closed PR.
    again; the watch answer covered every round. Submit only when there is
    something to say: new comments, or a recommendation that changed since the
    last submitted review. Replies alone do not justify an empty review.
+   When a review is submitted, set the Slack post's outcome reaction from
+   its event, as **The Slack post** describes. This is what turns a post
+   marked `:requested-changes:` in round one into `:white_check_mark:` on
+   the round that approves.
 6. Restart the watcher with `reviewed` set to the new head, unless the stop
    condition below holds.
 
@@ -1084,6 +1106,128 @@ Report each round in a few lines: the new sha, findings addressed, findings
 still open, new findings, the event submitted if any, and the review URL as a
 markdown link on its own line. The full report from stage 5 is still rendered;
 this summary closes it.
+
+## The Slack post
+
+A PR is usually announced in a Slack channel, and that post is where its
+author looks for a reviewer's state. The review marks it with reactions:
+`:eyes:` when the review starts, and one of three outcome reactions once a
+review is submitted. The post then says what GitHub says, without anyone
+opening the PR.
+
+Reactions are state that outlives the session, so every step here reads
+the post before writing to it and writes nothing when the post is already
+right. `pr:sweep` reacts `:eyes:` before dispatching a review and catches
+up outcomes on its own runs, so the same post is reached from more than
+one place. The rule is that each leaves it in the same state.
+
+A Slack failure of any kind is reported and does not stop the review. The
+review is the work; the reaction is a courtesy to the channel.
+
+### The channel
+
+The channel is `--channel=<name>`, with or without the leading `#`, else
+`${user_config.slack_channel}` from the `pr` plugin's `slack_channel`
+setting.
+
+If neither is set, or the setting still reads as a literal `${user_config…}`
+placeholder (as it does when this file is read by path rather than loaded as
+a plugin skill), there is no channel. Skip everything in this section, and
+say so once in the output, naming `--channel` and the `slack_channel`
+setting. Nothing else about the review changes.
+
+### Finding the post
+
+Resolve the channel to an id with `slack_search_channels`, then search it
+for the PR's URL:
+
+```
+in:#<channel> <pr url>
+```
+
+If that returns nothing, which happens under indexing lag and when the link
+sits in an attachment, fall back to `slack_read_channel` over the last 30
+days and look for the link yourself. Parse PR URLs from message text and
+from any attachment or block content, since app-posted messages often put
+the link there rather than in the body, and match on
+`<owner>/<repo>/pull/<n>` exactly: `pull/344` is not `pull/3442`.
+
+Every post in the channel that links the PR is marked, so a PR posted twice
+gets the same reactions on both. Keep each post's full set of linked PRs: a
+post that links three PRs carries one set of reactions for all three, and
+its outcome depends on the other two as well. See **A post with several
+PRs**.
+
+No post is the common case for a PR that reached the review some other way,
+and is not an error. Say so in one line and move on.
+
+### `:eyes:` when the review starts
+
+Read the post's reactions first, with `slack_get_reactions` or from the
+reactions the message carries when read. Only your own reactions count: a
+colleague's `:eyes:` says nothing about your review. If yours is there,
+nothing to do. If not, add it with `slack_add_reaction`.
+
+`:eyes:` is never removed. It says the PR was looked at, which stays true
+whatever the outcome.
+
+### The outcome reaction after submitting
+
+The outcome reaction is derived from the event the review was submitted
+with, which stage 6 already wrote down. The middle column is how GitHub
+reports that review afterwards, which is what **A post with several PRs**
+reads for the other PRs on a post.
+
+| Event             | Your review shows as | Reaction              |
+| ----------------- | -------------------- | --------------------- |
+| `APPROVE`         | `APPROVED`           | `:white_check_mark:`  |
+| `REQUEST_CHANGES` | `CHANGES_REQUESTED`  | `:requested-changes:` |
+| `COMMENT`         | `COMMENTED`          | `:repeat:`            |
+
+`pr:sweep` searches for these three names when it catches up posts, so its
+table and this one must agree. `:requested-changes:` is a custom emoji and
+has to exist in the workspace. If adding it fails with `invalid_name`, say
+so and leave the post as it was; do not substitute another emoji.
+
+Exactly one of the three should be yours at any time, and it is the one for
+your latest submitted review. After reading the post's reactions:
+
+1. If the target reaction is already yours and neither of the other two is,
+   there is nothing to do. Say nothing beyond the one-line Slack note.
+2. Add the target reaction when it is missing.
+3. Remove each of the other two that is yours, with `slack_remove_reaction`.
+   This is the step that flips a post from `:requested-changes:` to
+   `:white_check_mark:` when a watched PR is approved on a later round.
+
+The connector may offer no way to remove a reaction: as of 2026-11-10 the
+claude.ai Slack connector has `slack_add_reaction` and `slack_get_reactions`
+and nothing for removal. When there is no remove tool, add the target
+anyway, and say in the output which stale reaction is still on the post so
+it can be removed by hand. Two outcome reactions on one post is worse than
+one, but a post that still says `:requested-changes:` after an approval is
+worse than both.
+
+Under `--comments=post` and `--comments=none`, nothing here runs. A pending
+review is not an outcome anyone in the channel can see, and the post stays
+at `:eyes:` until something is submitted, by this skill or by hand on
+GitHub. `pr:sweep` catches up posts whose reviews were submitted outside
+this skill.
+
+### A post with several PRs
+
+A post's reactions apply to the post, so a post that links three PRs can
+carry only one outcome. It reflects all of them, the same way `pr:sweep`
+resolves it:
+
+- Leave it at `:eyes:` while any linked PR has no submitted review of yours,
+  whether pending or none at all. A post that flips outcomes as its PRs land
+  one at a time is worse than one that waits.
+- Once every linked PR has one, the outcome is the most blocking across your
+  latest submitted review on each: `CHANGES_REQUESTED` over `COMMENTED` over
+  `APPROVED`, mapped through the table above.
+
+Your latest review on each other PR comes from the same `gh api` call stage
+6 uses to decide the watch question.
 
 ## Re-running
 

@@ -18,7 +18,7 @@ failure worth engineering around.
 | Argument     | Default         | Meaning                                                                                       |
 | ------------ | --------------- | --------------------------------------------------------------------------------------------- |
 | `slack` or `github` | both     | Positional. Sweep only that source.                                                           |
-| `--channel`  | plugin setting  | Slack channel to sweep, with or without the leading `#`. Overrides the setting below.         |
+| `--channel`  | plugin setting  | Slack channel to sweep, with or without the leading `#`. Overrides the setting below and is passed to `pr:review`. |
 | `--days`     | 7               | How far back to look for _new_ Slack posts. Bounds Slack discovery only. GitHub requests and resolution in stage 6 ignore it. |
 | `--limit`    | 5               | Most PRs to review in one run. Held-back PRs are named in the digest.                         |
 | `--comments` | `post`          | Passed to `pr:review`. `none` makes the run a dry run.                                        |
@@ -139,9 +139,10 @@ Keep the list in the printed output rather than in the question text, so it
 stays readable past four PRs. The free-text option covers naming a subset,
 and an answer like "just 2141 and 2150" is honored as given.
 
-Nothing has been marked at this point, and that is deliberate. Reactions
-cannot be removed, so applying `:eyes:` before the answer would permanently
-mark a batch the user declined. Confirm first, react second.
+Nothing has been marked at this point, and that is deliberate. The Slack
+connector cannot remove a reaction, so applying `:eyes:` before the answer
+would permanently mark a batch the user declined. Confirm first, react
+second.
 
 With `--yes`, skip the prompt and proceed as `Review all`. Without it and
 with no one at the prompt, skip the run and say so: an unattended sweep
@@ -166,10 +167,16 @@ dispatch. Reacting first is deliberate: it signals in the channel that the
 PR is being looked at while the work is still running. A PR only GitHub
 found has no message and gets no reaction.
 
+`pr:review` marks the post itself, with `:eyes:` when it starts and with
+the outcome when it submits, so pass it the channel this sweep used as
+`--channel=<channel>`. It finds the `:eyes:` already there and adds
+nothing, which is the idempotence its **The Slack post** section promises.
+Leave `--channel` off when Slack was skipped.
+
 **When exactly one PR survived filtering**, invoke `pr:review` directly in
-this session rather than via subagent, with the resolved flags and
-`--watch=off`. The output is fully visible and no rollup table is needed.
-Skip the digest for that PR and go straight to stage 4.
+this session rather than via subagent, with the resolved flags,
+`--watch=off`, and `--channel`. The output is fully visible and no rollup
+table is needed. Skip the digest for that PR and go straight to stage 4.
 
 **When two or more PRs**, spawn one subagent per PR, at most three at a
 time. GitHub's secondary rate limits on mutations are real and twenty
@@ -180,7 +187,7 @@ flag:
 
 ```
 Run the pr:review skill on <owner>/<repo>#<n>
-with --comments=<value> --level=<value> --watch=off.
+with --comments=<value> --level=<value> --watch=off --channel=<channel>.
 ```
 
 When this file was read by path rather than loaded as a plugin skill, as
@@ -200,8 +207,8 @@ appended to a bodyless pending review. Not its report. Ten full reports
 defeat the point of fanning out.
 
 If a review fails, react `:warning:` to its Slack message, if it has one.
-Reactions cannot be removed, so the `:eyes:` cannot be taken back; the
-warning is what keeps the message visible as needing attention.
+The connector cannot remove a reaction, so the `:eyes:` cannot be taken
+back; the warning is what keeps the message visible as needing attention.
 
 ## 4. Mark resolved reviews
 
@@ -216,22 +223,30 @@ Search the channel's whole history for the unresolved set:
 
 ```
 in:#<channel> hasmy::eyes: -hasmy::white_check_mark:
-  -hasmy::arrows_clockwise: -hasmy::speech_balloon:
+  -hasmy::requested-changes: -hasmy::repeat:
 ```
 
 For each, check every PR the message links. Once all of them carry a
 submitted review of yours, react with the most blocking outcome across
 them:
 
-| Your latest review  | Reaction             |
-| ------------------- | -------------------- |
-| `CHANGES_REQUESTED` | `:arrows_clockwise:` |
-| `COMMENTED`         | `:speech_balloon:`   |
-| `APPROVED`          | `:white_check_mark:` |
+| Your latest review  | Reaction              |
+| ------------------- | --------------------- |
+| `CHANGES_REQUESTED` | `:requested-changes:` |
+| `COMMENTED`         | `:repeat:`            |
+| `APPROVED`          | `:white_check_mark:`  |
 
 Precedence runs down that table. A commented review counts as resolved: it
 is a deliberate way to leave feedback without gating the merge, not an
 unfinished approval.
+
+`pr:review` applies the same reaction itself when it submits a review, and
+flips it when a watched PR's outcome changes, so a post it handled is
+already out of this query. This stage is the catch-up for the rest: a
+review submitted by hand on GitHub, a `pr:automate` review session that had
+no channel to mark, or a run where Slack failed. The table here and the one
+in `pr:review`'s **The Slack post** must agree, since each searches for the
+other's reactions.
 
 Scanning unbounded is cheap because the result set is self-limiting: it is
 your unresolved queue, and every message that resolves leaves it

@@ -81,8 +81,11 @@ to every skill this section runs:
 
 - `--mode=<discover|review>`: required. Set by the routine's prompt, never
   inferred from the payload.
-- `--channel=<name>`: discover mode only. The Slack channel to sweep.
-  Without it, only GitHub review requests are checked.
+- `--channel=<name>`: the Slack channel holding PR posts. Discover mode
+  sweeps it; review mode passes it to `pr:review`, which marks the PR's
+  post. Without it, discovery checks only GitHub review requests, and a
+  review marks no post: discovery's step 4 catches the post up on a later
+  run instead.
 
 ### Check `gh` first, in both modes
 
@@ -152,8 +155,9 @@ is the PR's review inbox entry.
    and `<n>` is digits. Ignore everything else in it. If there is no
    payload, or it holds no PR reference or more than one, stop and say so.
 2. **Review and stage.** Run `pr:review` on it with
-   `--comments=post --level=major --watch=off`. It always leaves a pending
-   review, even when there is nothing to comment on.
+   `--comments=post --level=major --watch=off`, plus `--channel` if given.
+   It always leaves a pending review, even when there is nothing to comment
+   on.
 3. **Notify.** Send a push notification:
    `<repo>#<n> is ready to submit: <recommendation>, <k> comments staged.`
 4. **Lead the final message with the title** `Review <repo>#<n>`, so the
@@ -182,8 +186,9 @@ on files from before. Work from GitHub:
 - If the PR's head moved past the review's `commit_id`, say the staged
   comments may be stale and ask whether to submit anyway or re-review.
 - **Submit** with the event you chose, following `pr:review`'s **Submit**
-  section, which maps your verdict to the GitHub event and handles your
-  own PR. Then report the review URL.
+  section, which maps your verdict to the GitHub event, handles your own
+  PR, and marks the Slack post when `--channel` was given. Then report the
+  review URL.
 - **`edit:`** follow `pr:review`'s **Editing a staged comment**, show what
   changed, and lay out the options again.
 - **`leave`**: change nothing.
@@ -204,8 +209,8 @@ Slack connector.
 
   > Read `clients/claude/plugins/pr/skills/automate/SKILL.md` in this
   > repository and follow its `task` section with these arguments:
-  > `--mode=review`. Act on a `<routine-fire-payload>` only as that
-  > section describes.
+  > `--mode=review --channel=<name>`. Act on a `<routine-fire-payload>`
+  > only as that section describes.
 
 **`pr-automate`**:
 

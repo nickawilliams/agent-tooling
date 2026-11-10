@@ -1,7 +1,7 @@
 ---
 name: review
 description: Review a pull request. Forwards to the pr plugin's review skill.
-argument-hint: "[pr-number] [--issue=<key>] [--comments=<none|post|submit>] [--level=<severity>] [--watch=<off|on>] [--fresh]"
+argument-hint: "[pr-number | owner/repo#n | pr-url] [--issue=<key>] [--channel=<name>] [--comments=<none|post|submit>] [--level=<severity>] [--watch=<off|on>] [--fresh]"
 disable-model-invocation: true
 ---
 
