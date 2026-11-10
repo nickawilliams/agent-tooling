@@ -606,6 +606,19 @@ collisions).
   Names stay only where they are operative: the frontmatter, the
   Skill tool call, and the next-step command in the user-facing
   report.
+- `make-it-so`'s readiness check asks decidable questions inline
+  (2026-11-10). It used to stop on any open question and send the
+  user to `ready-room`, even when they were at the prompt and the
+  question was a product call they could make in a sentence; the
+  context already gathered was lost and the ready room repeated it.
+  Open questions now sort by who can answer them. Ones the person at
+  the prompt can decide are asked in one batch and the answers go on
+  the issue as one comment, the one write the skill makes beyond
+  foreman's transitions, so Jira stays the record. Ones that need
+  research, production data, or an absent person still hand off, and
+  an unattended run treats every question that way. The step 2
+  workaround for `foreman start --workspace` stays until EX-34341
+  merges.
 - Every push in `make-it-so` rebases the branch onto its base first
   (2026-11-09): the first push sets the baseline and each push after
   keeps it, with `--force-with-lease --force-if-includes`. The base is

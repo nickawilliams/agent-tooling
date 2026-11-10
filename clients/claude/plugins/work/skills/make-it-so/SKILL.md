@@ -101,8 +101,9 @@ a terminal, so drive it with these rules:
 Foreman owns the issue's lifecycle state: `start` moves it to In
 Progress, `review` moves it to Review. Those transitions are
 expected side effects. Beyond them, the Jira issue is read-only to
-you — never transition it, comment on it, or edit its fields
-directly.
+you — never transition it or edit its fields directly, and the one
+comment you write is the record of answers the user gave at the
+readiness check (step 1).
 
 ## Pushing
 
@@ -214,16 +215,35 @@ one whose PR was closed unmerged is a question for the user.
    "decide", "confirm first", or a fix offered as alternatives
    ("if X, do A; otherwise B") are the usual signs. An open question
    blocks only when its answer changes what gets built or which
-   repos change, and the code alone can't answer it — it needs
-   production data, a product call, or someone else's input. A
-   question settled in a later comment is not open. If any blocking
-   question remains, stop before `foreman start`: list each one and
-   quote where it appears, and point the user to
-   `/work:ready-room <KEY>`. Don't research it yourself: that skill
-   records the answer in Jira, where this one reads it on the next
-   run.
-   Extra instructions after the key that settle a question, or tell
-   you to proceed anyway, override this check.
+   repos change, and the code alone can't answer it. A question
+   settled in a later comment is not open, and neither is one that
+   extra instructions after the key settle, or that they say to
+   proceed past.
+
+   Sort the blocking questions by who can answer them:
+
+   - **A decision the person at the prompt can make now** — a
+     product or design call whose options are already on the table
+     and need nothing looked up first. Ask these inline, all in one
+     AskUserQuestion batch, with your recommended answer first and
+     the trade-off in a sentence each. An answer of "I don't know"
+     or "that needs looking into" moves that question to the second
+     kind. Then, before anything is set up, record the answers on
+     the issue as one comment, each question quoted with its answer,
+     so the issue stays the record of what was decided. This is the
+     one write to the issue this skill makes beyond foreman's
+     transitions; the answer at the prompt is the approval for it.
+     Then continue.
+   - **A question that needs research, production data, or someone
+     who isn't here** — whether a route is still called, what a
+     customer expects, a call that belongs to another team. Stop
+     before `foreman start`: list each one, quote where it appears,
+     and point the user to `/work:ready-room <KEY>`, which does that
+     research and records the answer in Jira, where this skill reads
+     it on the next run. Don't research it yourself.
+
+   With nobody at the prompt (an unattended run), every blocking
+   question is the second kind.
 
 2. **Set up the work area.** Decide which repository (or
    repositories) the issue needs. If the cwd is inside a repo
@@ -521,7 +541,8 @@ one whose PR was closed unmerged is a question for the user.
 ## When to interrupt the user (and only then)
 
 - The issue leaves open a question that decides what gets built
-  (step 1's readiness check).
+  (step 1's readiness check): asked inline when the user can answer
+  it, handed off when it needs research or someone who isn't here.
 - The issue's requirements are ambiguous in a way the code and repo
   conventions can't resolve, and the interpretations lead to
   materially different implementations.
