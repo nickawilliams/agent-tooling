@@ -950,7 +950,7 @@ were staged, how many were skipped as already present, how many fell below
 `--level`, and that the review stays pending until submitted. The review URL
 is `https://github.com/<owner>/<repo>/pull/<n>#pullrequestreview-<review_id>`
 (use the numeric `id` from the review creation response, not the node_id).
-Always end the response with this as a markdown link on its own line.
+Always end the response with it as the review link described below.
 
 Under `--comments=submit`, publish it. The decision was already made, by flag
 or at the prompt, so do not ask a second time:
@@ -974,8 +974,25 @@ Submitting requires an event; there is no publish-without-verdict. Map
   self-approval)
 - anything else → `COMMENT`
 
-Always end the response with the review URL as a markdown link on its own line:
-`https://github.com/<owner>/<repo>/pull/<n>#pullrequestreview-<review_id>`.
+Always end the response with the review URL as the review link.
+
+### The review link
+
+The last line of every response that stages or submits a review is a
+markdown link on its own line, in this form:
+
+```
+[<STATUS>: <repo>#<n>](https://github.com/<owner>/<repo>/pull/<n>#pullrequestreview-<review_id>)
+```
+
+`<repo>` is the bare repository name, without the owner. `<STATUS>` is the
+review's GitHub state after this run: `PENDING` under `--comments=post`, and
+under `--comments=submit` the state the submitted event produces, `APPROVED`,
+`CHANGES_REQUESTED`, or `COMMENTED`. For example:
+
+```
+[APPROVED: host-ui#2619](https://github.com/ExtrackerInc/host-ui/pull/2619#pullrequestreview-5879039639)
+```
 
 Once the submit call succeeds, set the Slack post's outcome reaction from
 the event, as **The Slack post** describes. Do it before resolving threads
@@ -1103,8 +1120,8 @@ Stop after any round whose recommendation is `approve`, once that review is
 submitted. Nothing is left to follow up on.
 
 Report each round in a few lines: the new sha, findings addressed, findings
-still open, new findings, the event submitted if any, and the review URL as a
-markdown link on its own line. The full report from stage 5 is still rendered;
+still open, new findings, the event submitted if any, and the review link
+described under **Submit**. The full report from stage 5 is still rendered;
 this summary closes it.
 
 ## The Slack post

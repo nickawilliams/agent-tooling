@@ -208,7 +208,7 @@ This is not optional. A subagent has nobody at the prompt, so an unflagged
 posts nothing. The run would look successful and land no comments.
 
 Ask each subagent to return only: PR, recommendation, comments staged,
-comments skipped as already present, review URL, anything it listed as
+comments skipped as already present, review link, anything it listed as
 `unverified`, and whether the review body was suppressed because it
 appended to a bodyless pending review. Not its report. Ten full reports
 defeat the point of fanning out.
@@ -272,12 +272,13 @@ One digest, grouped:
 
 | PR | Source | Recommendation | Comments | Review |
 | --- | --- | --- | --- | --- |
-| [`<repo>#<n>`](<pr-url>) <title> | slack / github / both | request-changes / comment / approve-with-nits | `<n> staged` / `<n> posted` / `none` | [view](<review-url>) |
+| [`<repo>#<n>`](<pr-url>) <title> | slack / github / both | request-changes / comment / approve-with-nits | `<n> staged` / `<n> posted` / `none` | [<STATUS>: <repo>#<n>](<review-url>) |
 
 PR column: the linked text is `<repo-name>#<pr-number>`, followed by the PR
 title as plain text. Comments column: `<n> staged` under `--comments=post`,
 `<n> posted` under `--comments=submit`, `none` under `--comments=none`.
-Review column: `[view](<url>)` when a review was created or appended to,
+Review column: the review link from `pr:review` (see **The review link**
+under its **Submit** section) when a review was created or appended to,
 `—` when nothing was posted.
 
 **Skipped**: with the reason: draft, pending review awaiting you, already

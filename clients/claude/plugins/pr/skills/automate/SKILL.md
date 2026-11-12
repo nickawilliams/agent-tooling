@@ -173,7 +173,10 @@ is the PR's review inbox entry.
    > - `edit: <what to change>`: change or remove staged comments first
    > - `leave`: keep it pending; submit it yourself on GitHub
    >
-   > [Staged review](<review URL>)
+   > [PENDING: <repo>#<n>](<review URL>)
+
+   That last line is `pr:review`'s review link (see **The review link**
+   under its **Submit** section).
 
    Then stop and wait. Nothing is submitted until you reply.
 
@@ -188,8 +191,8 @@ on files from before. Work from GitHub:
   comments may be stale and ask whether to submit anyway or re-review.
 - **Submit** with the event you chose, following `pr:review`'s **Submit**
   section, which maps your verdict to the GitHub event, handles your own
-  PR, and marks the Slack post when `--channel` was given. Then report the
-  review URL.
+  PR, and marks the Slack post when `--channel` was given. Then end with
+  the review link, whose status is now the submitted state.
 - **`edit:`** follow `pr:review`'s **Editing a staged comment**, show what
   changed, and lay out the options again.
 - **`leave`**: change nothing.
