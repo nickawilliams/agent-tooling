@@ -320,6 +320,12 @@ Two things read this repo, and the layout has to serve both:
     `auto-title` can't name cloud sessions where you look for them; see
     its section. Hooks added to `~/.claude/settings.json` mid-session
     are hot-loaded and fire on the next prompt.
+  - `AskUserQuestion` works in cloud sessions driven from the claude.ai
+    web UI. Tested 2026-11-13 in a session whose only action was one
+    question: the card rendered, the chosen option reached the session,
+    and the session continued with it. Skills that ask questions run
+    unchanged there; only routines, which have no one to answer, need a
+    non-interactive path.
 
 Working proposal (open): a routine's prompt says "read
 `clients/claude/plugins/<name>/skills/<skill>/SKILL.md` and follow it"
