@@ -841,9 +841,13 @@ making the pick once and caching it. `_slug_for` normalizes the title
 (the rule's `strip` step, whitespace collapsed), looks for
 `${CLAUDE_PLUGIN_DATA}/slugs/<hash>.json` keyed by the lowercased text,
 and on a miss runs one headless turn, `claude -p --model haiku --tools
-"" --setting-sources "" --no-session-persistence`, in an empty
-directory under a ten-second budget, accepting the answer only when it
-is a slug, then writes it to the cache with the text and model. The
+"" --setting-sources "" --no-session-persistence`, under a ten-second
+budget in one fixed empty directory, `${CLAUDE_PLUGIN_DATA}/slug-cwd`
+(Claude Code makes a project folder under `~/.claude/projects` for
+every cwd it runs in, so a fresh temporary one per call would leave a
+folder each), accepting the answer only when it is a slug, then writes
+it to the cache with the text and model. No transcript is saved, so
+the calls never appear in `claude --resume`. The
 hook path (`_format`, for a `name` with no `slug`) and the `slug` mode
 share it, so the first caller for an issue, usually the prompt hook
 titling the first session, pays about two seconds, and the skill

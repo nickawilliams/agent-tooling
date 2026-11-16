@@ -487,11 +487,15 @@ auto_title::_hash() {
  # One headless turn: no tools, no settings (so no hooks or plugins
  # load in the child, which is what makes it fast), no saved session,
  # and an empty working directory, so no CLAUDE.md or memory colors
- # the answer. `--bare` would be the natural fit, but it reads no OAuth
- # login, so it is not used. The answer counts only when it is a slug.
+ # the answer. The directory is one fixed path, not a fresh temporary
+ # one: Claude Code makes a project folder under ~/.claude/projects for
+ # every cwd it runs in, and one empty folder is clutter enough. `--bare`
+ # would be the natural fit, but it reads no OAuth login, so it is not
+ # used. The answer counts only when it is a slug.
  #
  # @env     SLUG_MODEL     The model; `none` declines at once
  # @env     SLUG_BUDGET    Seconds allowed
+ # @env     CLAUDE_PLUGIN_DATA  Holds the empty cwd; else TMPDIR does
  #
  # @operand <text>         The title, from auto_title::_slug_text
  #
@@ -502,7 +506,8 @@ auto_title::_model_slug() {
 
   [[ -n "${SLUG_MODEL}" && "${SLUG_MODEL}" != "none" ]] || return 0
   command -v claude >/dev/null 2>&1 || return 0
-  dir="$(mktemp -d)" || return 0
+  dir="${CLAUDE_PLUGIN_DATA:-${TMPDIR:-/tmp}}/slug-cwd"
+  mkdir -p "${dir}" 2>/dev/null || return 0
 
   prompt='Write the slug that will name a git branch and a session for this issue title.'
   prompt+=$'\n''Rules: two to five lowercase ASCII words joined by single hyphens, nothing else.'
@@ -515,7 +520,6 @@ auto_title::_model_slug() {
   slug="$(cd "${dir}" && auto_title::_timed "${SLUG_BUDGET}" \
     claude -p --model "${SLUG_MODEL}" --tools "" --setting-sources "" \
       --no-session-persistence "${prompt}")"
-  rm -rf "${dir}"
 
   slug="${slug%%$'\n'*}"
   slug="${slug#"${slug%%[![:space:]]*}"}"
