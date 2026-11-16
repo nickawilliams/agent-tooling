@@ -51,13 +51,12 @@ object of title fields, which the plugin assembles into the house format
 gives `EX-1337 · timecard-sync-drops-overtime · review → api#3442`.
 Every field is optional; `issue` is the issue key, `name` the issue's or
 PR's title (the plugin turns it into a slug: a leading key or `Area ::`
-prefix dropped, an outline prefix such as `A.` kept in front, stopwords
-removed, five words at most, hyphenated; the same rule as
-`/auto-title:slug`), `slug` a slug already written, in a branch or
-workspace name or typed by the user, in place of `name` (used as is),
-`verb` what the session does, and `target` what the verb acts on. A
-title needs an issue, a name, or a target. Any line that isn't a JSON
-object is used as the title verbatim.
+prefix dropped, then two to five words picked by a model and cached per
+title, the same lookup as `/auto-title:slug`), `slug` a slug already
+written, in a branch or workspace name or typed by the user, in place
+of `name` (used as is), `verb` what the session does, and `target` what
+the verb acts on. A title needs an issue, a name, or a target. Any line
+that isn't a JSON object is used as the title verbatim.
 
 The skill then answers to both `/<plugin>:<skill>` and bare `/<skill>`;
 no pattern is written. The new handler is picked up at the next session

@@ -305,14 +305,15 @@ one whose PR was closed unmerged is a question for the user.
    full title, which yields unwieldy branch and workspace names. The
    slug is the one the user passed as `--slug`, exactly as typed;
    otherwise invoke `/auto-title:slug <issue summary>` and use its one
-   line of output verbatim. Never write the slug yourself: the same
-   rules name the session, so the branch, the workspace, and the
-   session title carry the same words. Examples:
+   line of output verbatim. Never write the slug yourself: that skill
+   asks a model once per title and caches the answer, and the hook
+   that titled this session read the same cache, so the branch, the
+   workspace, and the session title carry the same words. Examples:
 
    - "A. Create the configuration schema and transition view" →
      `a-create-configuration-schema-transition-view`
    - "Timecard sync improvements for the payroll integration" →
-     `timecard-sync-improvements-payroll-integration`
+     `timecard-sync-improvements`
 
    When the user wants a new workspace alongside an existing one,
    `foreman start` can't make it: it always reuses the issue's

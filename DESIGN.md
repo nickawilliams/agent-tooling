@@ -833,6 +833,37 @@ workspace slug read back from the environment is still used verbatim,
 so a hand-named branch keeps its name. `check`, beside the script,
 exercises the rule, the format, and the override by hand.
 
+**Model-chosen slug** (2026-11-16). The fixed rule's slugs were as good
+as scripting gets and not good enough: it keeps the first five
+non-stopwords, so a title's filler leads and its point is cut off. The
+words are now picked by a model, and the one-slug property is kept by
+making the pick once and caching it. `_slug_for` normalizes the title
+(the rule's `strip` step, whitespace collapsed), looks for
+`${CLAUDE_PLUGIN_DATA}/slugs/<hash>.json` keyed by the lowercased text,
+and on a miss runs one headless turn, `claude -p --model haiku --tools
+"" --setting-sources "" --no-session-persistence`, in an empty
+directory under a ten-second budget, accepting the answer only when it
+is a slug, then writes it to the cache with the text and model. The
+hook path (`_format`, for a `name` with no `slug`) and the `slug` mode
+share it, so the first caller for an issue, usually the prompt hook
+titling the first session, pays about two seconds, and the skill
+naming the branch reads the answer back; the `strip` step is why
+`EX-1337: Fix sync` from a handler and the bare summary from a skill
+hit the same entry. The fixed rule stays as the fallback (model
+unreachable, over budget, `AUTO_TITLE_SLUG_MODEL=none`, no hasher), so
+the plugin degrades to the 2026-11-09 behavior rather than to nothing;
+the prompt hook's timeout went from 15 to 20 seconds to hold the budget
+and the Jira lookup. Chosen over the alternative, the session picking
+the slug itself and the title catching up on the next prompt or on
+resume: the model can't rename its session, so that design reopens the
+first-session mismatch this one closes, and a two-second hold on one
+prompt per issue was judged the cheaper price. Facts behind the flags:
+`--bare` would be the natural isolation but reads no OAuth login, so a
+login-based install can't use it; an empty `--setting-sources` loads
+no hooks or plugins in the child and is what takes the call from seven
+seconds to two. `check cache` runs the whole path against a stub
+`claude`; `check model` makes one real call.
+
 **Mechanics.** One script, `auto-title`, with hook modes `index`
 (`SessionStart`, every source) and `prompt` (`UserPromptSubmit`), a
 `status` mode behind the `/auto-title` skill, and a `slug` mode behind
@@ -846,7 +877,8 @@ else `installPath`, and writes the rules to
 `${CLAUDE_PLUGIN_DATA}/sessions/<session_id>.json`. Keying by session
 rather than one shared file keeps concurrent sessions in different
 projects from racing; files older than seven days are swept. `prompt`
-reads only that file: no enumeration and no `claude` spawn per prompt.
+reads only that file: no enumeration per prompt, and a `claude` spawn
+only for a slug cache miss (above).
 It exits at once when the payload carries `session_title`, which is
 present only once a title exists, so a `/rename` is never overwritten
 and a session is titled at most once.
@@ -898,5 +930,11 @@ Reference facts, tested 2026-11-04 on Claude Code 2.1.308:
 - A plugin loaded in place from a directory marketplace still has a
   stale copy in the cache at `installPath`; `readFromFolder` is what
   Claude Code reads.
+- Tested 2026-11-16 on 2.1.311: `sessionTitle` is still accepted from
+  `SessionStart` and `UserPromptSubmit` only. `claude -p` runs from a
+  hook or a Bash tool call of a live session (`CLAUDECODE=1` is only a
+  marker); `--bare` fails with "Not logged in" under OAuth; and
+  `--setting-sources ""` with `--tools ""` answers a one-line prompt
+  with Haiku in about two seconds, against seven with settings loaded.
 - `systemMessage` from `SessionStart` is shown in the TUI and persists,
   styled as a muted info line.

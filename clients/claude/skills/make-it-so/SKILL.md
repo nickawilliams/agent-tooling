@@ -112,8 +112,9 @@ one whose PR was closed unmerged is a question for the user.
    the user passed as `--slug`, exactly as typed; otherwise invoke
    `/auto-title:slug <issue title>` (the `auto-title` plugin must be
    installed) and use its one line of output verbatim. Never write
-   the slug yourself: the same rules name the session, so the branch
-   and the session title carry the same words. For example,
+   the slug yourself: that skill asks a model once per title and
+   caches the answer, which the session title was made from, so the
+   branch and the session title carry the same words. For example,
    "A. Create the configuration schema and transition view" →
    `a-create-configuration-schema-transition-view`.
    Enter the work area with Claude Code's native worktree

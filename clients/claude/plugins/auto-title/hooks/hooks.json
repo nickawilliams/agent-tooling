@@ -18,7 +18,7 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/auto-title\" prompt",
-            "timeout": 15
+            "timeout": 20
           }
         ]
       }

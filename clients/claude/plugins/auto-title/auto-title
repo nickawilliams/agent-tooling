@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #?/name     auto-title — Name a session after the skill that starts it
-#?/version  1.4.0
+#?/version  1.5.0
 #?/synopsis auto-title {index|prompt|status|slug <text...>}
 #?/description
  # Hook script for the auto-title plugin. `index` runs at SessionStart:
@@ -23,16 +23,22 @@
  # The line is either a JSON object of title fields, which this script
  # assembles into the house format, or any other text, used as the title
  # verbatim. The fields are `issue` (a key such as EX-1337), `name` (the
- # issue's or PR's title, slugified here by the rules under SLUG_JQ) or
- # `slug` (a branch or workspace slug, or one the user typed, used as
- # is), `verb` (what the session does, lowercase), and `target` (what
- # the verb acts on, such as api#456); each may be absent. The format is
+ # issue's or PR's title, slugified here) or `slug` (a branch or
+ # workspace slug, or one the user typed, used as is), `verb` (what the
+ # session does, lowercase), and `target` (what the verb acts on, such
+ # as api#456); each may be absent. The format is
  # `[<issue> · ]<name> · <verb>[ → <target>]`, and a title needs an
  # issue, a name, or a target. Keeping assembly here means the format
- # and the slug rules live in one place and every handler supplies only
- # facts. The `slug` mode exposes the same rules to skills that name
- # branches, so a branch and the session title for it carry the same
- # words.
+ # and the slug live in one place and every handler supplies only facts.
+ #
+ # A name becomes a slug by asking a model, in one short headless
+ # `claude -p` turn, which words carry it; the answer is cached by the
+ # name's text under ${CLAUDE_PLUGIN_DATA}/slugs, so the first caller
+ # for an issue pays the call and every later one gets the same words.
+ # The `slug` mode exposes the same lookup to skills that name branches,
+ # so a branch and the session title for it agree. When the model is
+ # off, unreachable, or slow, the fixed rule under SLUG_JQ answers
+ # instead.
  #
  # Runs at every session start and every prompt, so it must never block
  # either: every mode exits 0, and problems are reported once through a
@@ -58,23 +64,37 @@ readonly SLUG_STOPWORDS='["a","an","the","and","or","of","for","to","in",
   "on","at","by","with","from","into","as","is","are","be","this","that",
   "it","its","via"]'
 
-# The jq definition of a slug, shared by auto_title::_format and the
-# `slug` mode so that a branch and the title of a session for it agree.
-# `$stop` is the stopword array and `$words` the body word limit. In
-# order: drop a leading issue reference (`EX-1337:`, `[EX-1337]`,
-# `#123`) and an `Area ::` prefix; lift an outline prefix (`A.`, `3)`,
-# `Part 1:`) so it leads the slug untouched; delete apostrophes so
-# "don't" is `dont`; lowercase and split on everything else; drop
-# stopwords from the body unless that would empty it; keep the first
-# $words body words; join with hyphens. Nothing left gives "".
+# The model that picks a slug's words, its time budget in whole
+# seconds, and the longest answer accepted. AUTO_TITLE_SLUG_MODEL
+# overrides the model, and `none` turns the call off, which leaves the
+# SLUG_JQ rule; AUTO_TITLE_SLUG_BUDGET overrides the budget. The budget
+# must leave the prompt hook's timeout in hooks.json room for the rest
+# of a prompt's work.
+readonly SLUG_MODEL="${AUTO_TITLE_SLUG_MODEL:-haiku}"
+readonly SLUG_BUDGET="${AUTO_TITLE_SLUG_BUDGET:-10}"
+readonly SLUG_MAX=60
+
+# The jq definition of the fallback slug, shared by auto_title::_format
+# and the `slug` mode so that a branch and the title of a session for
+# it agree even without the model. `$stop` is the stopword array and
+# `$words` the body word limit. In order: drop a leading issue reference
+# (`EX-1337:`, `[EX-1337]`, `#123`) and an `Area ::` prefix; lift an
+# outline prefix (`A.`, `3)`, `Part 1:`) so it leads the slug untouched;
+# delete apostrophes so "don't" is `dont`; lowercase and split on
+# everything else; drop stopwords from the body unless that would empty
+# it; keep the first $words body words; join with hyphens. Nothing left
+# gives "". `strip` is the first two steps alone, which also make the
+# model's input and the cache key.
 # shellcheck disable=SC2016  # a jq program, not shell
 readonly SLUG_JQ='
   def words:
     gsub("[\u0027\u2019]"; "") | ascii_downcase | [splits("[^a-z0-9]+")]
     | map(select(. != ""));
-  def slug:
+  def strip:
     sub("^\\s*(#[0-9]+|[\\[(]?[A-Za-z]{2,10}-[0-9]+[\\])]?)[\\s:.,;|-]*"; "")
-    | sub("^[^:]{1,40}::\\s*"; "")
+    | sub("^[^:]{1,40}::\\s*"; "");
+  def slug:
+    strip
     | (capture("^\\s*(?<p>([A-Za-z]|[0-9]{1,3})[.)]|(part|phase|step)\\s+[0-9]+[:.)]?)\\s+(?<rest>.*)$"; "i")
        // {p: "", rest: .}) as $m
     | ($m.p | words) as $prefix
@@ -379,19 +399,209 @@ auto_title::index() {
 }
 
 #@/private
+ # Run a command under a time budget.
+ #
+ # Bash has no timeout builtin and macOS ships no `timeout`, so the
+ # command runs in the background and is killed when the budget runs
+ # out. Its output is relayed only when it finished in time, and it
+ # gets no stdin, so a child that reads it can't hang on the hook's.
+ #
+ # @operand <seconds>      The budget, whole seconds
+ # @operand <command...>   The command and its arguments
+ #
+ # @stdout                 The command's stdout, when it finished in time
+ #
+ # @exit    124            The budget ran out
+ # @exit    *              The command's own status
+ ##
+auto_title::_timed() {
+  local seconds="${1}" out pid tick rc
+  shift
+
+  out="$(mktemp)" || return 1
+  "$@" > "${out}" 2>/dev/null < /dev/null &
+  pid=$!
+  for (( tick = seconds * 10; tick > 0; tick-- )); do
+    kill -0 "${pid}" 2>/dev/null || break
+    sleep 0.1
+  done
+  if kill -0 "${pid}" 2>/dev/null; then
+    kill "${pid}" 2>/dev/null
+    wait "${pid}" 2>/dev/null
+    rm -f "${out}"
+    return 124
+  fi
+  wait "${pid}"
+  rc=$?
+  cat "${out}"
+  rm -f "${out}"
+  return "${rc}"
+}
+
+#@/private
+ # Print the text a slug is made from.
+ #
+ # The title with its leading issue reference and `Area ::` prefix
+ # dropped (the `strip` step of SLUG_JQ) and its whitespace collapsed.
+ # It is the model's input and, lowercased, the cache key, so
+ # `EX-1337: Fix sync` from a handler and `Fix sync` from a skill reach
+ # the same entry.
+ #
+ # @operand <title>        The title
+ #
+ # @stdout                 The text, possibly empty
+ ##
+auto_title::_slug_text() {
+  local text
+
+  text="$(jq -nr --arg text "${1}" "${SLUG_JQ}"' $text | strip' 2>/dev/null \
+    | tr -s '[:space:]' ' ')"
+  text="${text#"${text%%[![:space:]]*}"}"
+  text="${text%"${text##*[![:space:]]}"}"
+  printf '%s' "${text}"
+}
+
+#@/private
+ # Print a short hash of a text, for a cache file name.
+ #
+ # @operand <text>         The text
+ #
+ # @stdout                 Sixteen hex characters, or nothing without a hasher
+ ##
+auto_title::_hash() {
+  local sum
+
+  if command -v shasum >/dev/null 2>&1; then
+    sum="$(printf '%s' "${1}" | shasum -a 256 2>/dev/null)"
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sum="$(printf '%s' "${1}" | sha256sum 2>/dev/null)"
+  else
+    return 0
+  fi
+  printf '%s' "${sum:0:16}"
+}
+
+#@/private
+ # Ask the slug model which words carry a title.
+ #
+ # One headless turn: no tools, no settings (so no hooks or plugins
+ # load in the child, which is what makes it fast), no saved session,
+ # and an empty working directory, so no CLAUDE.md or memory colors
+ # the answer. `--bare` would be the natural fit, but it reads no OAuth
+ # login, so it is not used. The answer counts only when it is a slug.
+ #
+ # @env     SLUG_MODEL     The model; `none` declines at once
+ # @env     SLUG_BUDGET    Seconds allowed
+ #
+ # @operand <text>         The title, from auto_title::_slug_text
+ #
+ # @stdout                 The slug, or nothing
+ ##
+auto_title::_model_slug() {
+  local text="${1}" dir prompt slug
+
+  [[ -n "${SLUG_MODEL}" && "${SLUG_MODEL}" != "none" ]] || return 0
+  command -v claude >/dev/null 2>&1 || return 0
+  dir="$(mktemp -d)" || return 0
+
+  prompt='Write the slug that will name a git branch and a session for this issue title.'
+  prompt+=$'\n''Rules: two to five lowercase ASCII words joined by single hyphens, nothing else.'
+  prompt+=' Keep the words that identify the work and drop filler.'
+  prompt+=' Use the title'"'"'s own words, not synonyms.'
+  prompt+=' Keep a leading outline marker such as "A." or "Part 1:" as the first word, written as "a" or "part-1".'
+  prompt+=' Reply with the slug alone.'
+  prompt+=$'\n\n'"Title: ${text}"
+
+  slug="$(cd "${dir}" && auto_title::_timed "${SLUG_BUDGET}" \
+    claude -p --model "${SLUG_MODEL}" --tools "" --setting-sources "" \
+      --no-session-persistence "${prompt}")"
+  rm -rf "${dir}"
+
+  slug="${slug%%$'\n'*}"
+  slug="${slug#"${slug%%[![:space:]]*}"}"
+  slug="${slug%"${slug##*[![:space:]]}"}"
+  [[ "${slug}" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ && ${#slug} -le ${SLUG_MAX} ]] \
+    || return 0
+  printf '%s' "${slug}"
+}
+
+#@/private
+ # Print the slug for a title: cached, else from the model, else nothing.
+ #
+ # The cache is one JSON file per title under
+ # ${CLAUDE_PLUGIN_DATA}/slugs, named by a hash of the lowercased text
+ # and holding the slug with the text and model that made it, so the
+ # first caller for an issue pays the model call and every later one,
+ # in any session, reads its answer. Without CLAUDE_PLUGIN_DATA or a
+ # hasher there is no cache and every call asks the model. The caller
+ # falls back to the SLUG_JQ rule when nothing is printed.
+ #
+ # @env     CLAUDE_PLUGIN_DATA  Holds the cache
+ #
+ # @operand <title>        The title
+ #
+ # @reads   $CLAUDE_PLUGIN_DATA/slugs/<hash>
+ # @writes  $CLAUDE_PLUGIN_DATA/slugs/<hash>  On a model answer
+ #
+ # @stdout                 The slug, or nothing
+ ##
+auto_title::_slug_for() {
+  local text key file="" slug
+
+  text="$(auto_title::_slug_text "${1}")"
+  [[ -n "${text}" ]] || return 0
+
+  if [[ -n "${CLAUDE_PLUGIN_DATA:-}" ]]; then
+    key="$(auto_title::_hash "$(printf '%s' "${text}" | tr '[:upper:]' '[:lower:]')")"
+    [[ -n "${key}" ]] && file="${CLAUDE_PLUGIN_DATA}/slugs/${key}.json"
+  fi
+  if [[ -n "${file}" && -r "${file}" ]]; then
+    slug="$(jq -r '.slug // empty' "${file}" 2>/dev/null)"
+    if [[ -n "${slug}" ]]; then
+      printf '%s' "${slug}"
+      return 0
+    fi
+  fi
+
+  slug="$(auto_title::_model_slug "${text}")"
+  [[ -n "${slug}" ]] || return 0
+  if [[ -n "${file}" ]] && mkdir -p "${file%/*}" 2>/dev/null; then
+    jq -nc --arg text "${text}" --arg slug "${slug}" \
+      --arg model "${SLUG_MODEL}" \
+      --arg generated "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      '{text: $text, slug: $slug, model: $model, generated: $generated}' \
+      > "${file}" 2>/dev/null
+  fi
+  printf '%s' "${slug}"
+}
+
+#@/private
  # Turn a handler's line into the session title.
  #
  # A JSON object is assembled into `[<issue> · ]<name> · <verb>[ →
- # <target>]`; anything else is the title itself. Either way the result
- # is cut to TITLE_MAX characters, by shortening the name at a hyphen
- # where there is one and with a trailing ellipsis otherwise.
+ # <target>]`; anything else is the title itself. A name with no slug
+ # beside it is given one by auto_title::_slug_for first, and by the
+ # SLUG_JQ rule inside FORMAT_JQ when that prints nothing. Either way
+ # the result is cut to TITLE_MAX characters, by shortening the name at
+ # a hyphen where there is one and with a trailing ellipsis otherwise.
  #
  # @operand <line>         The handler's output line
  #
  # @stdout                 The title, or nothing to decline
  ##
 auto_title::_format() {
-  jq -nr --arg out "${1}" --argjson max "${TITLE_MAX}" \
+  local line="${1}" name slug
+
+  name="$(jq -r 'select(type == "object")
+    | select((.slug // "" | tostring) == "")
+    | .name // "" | tostring' <<< "${line}" 2>/dev/null)"
+  if [[ -n "${name}" ]]; then
+    slug="$(auto_title::_slug_for "${name}")"
+    [[ -n "${slug}" ]] \
+      && line="$(jq -c --arg slug "${slug}" '.slug = $slug' <<< "${line}")"
+  fi
+
+  jq -nr --arg out "${line}" --argjson max "${TITLE_MAX}" \
     --argjson stop "${SLUG_STOPWORDS}" --argjson words "${SLUG_WORDS}" \
     "${FORMAT_JQ}" 2>/dev/null
 }
@@ -616,7 +826,14 @@ auto_title::prompt() {
  # @exit    0              Always
  ##
 auto_title::status() {
-  local data_dir="${CLAUDE_PLUGIN_DATA:-}" index
+  local data_dir="${CLAUDE_PLUGIN_DATA:-}" index cached=0
+
+  if [[ -n "${data_dir}" && -d "${data_dir}/slugs" ]]; then
+    cached="$(find "${data_dir}/slugs" -name '*.json' 2>/dev/null | wc -l)"
+    cached="${cached//[[:space:]]/}"
+  fi
+  printf 'Slug model: %s (%s cached under %s)\n' "${SLUG_MODEL}" "${cached}" \
+    "${data_dir:-an unset CLAUDE_PLUGIN_DATA}/slugs"
 
   if [[ -z "${data_dir}" || ! -d "${data_dir}/sessions" ]]; then
     printf 'No session index yet: the SessionStart hook has not run, or CLAUDE_PLUGIN_DATA is unset.\n'
@@ -640,14 +857,17 @@ auto_title::status() {
 }
 
 #@/subcommand slug
- # Print the slug for a title, by the rules every session title uses.
+ # Print the slug for a title, as a session title would carry it.
  #
  # For skills that name branches: the branch and the session title for
- # it then carry the same words. The operands are joined with spaces,
- # so a title needs no quoting; with no operand the title is read from
- # stdin, which a quoted heredoc can carry whatever characters it has.
- # Unlike the hook modes this one reports failure, since a caller is
- # waiting on the answer.
+ # it then carry the same words. The slug is the cached or model-made
+ # one from auto_title::_slug_for, else the SLUG_JQ rule's. The
+ # operands are joined with spaces, so a title needs no quoting; with
+ # no operand the title is read from stdin, which a quoted heredoc can
+ # carry whatever characters it has. Unlike the hook modes this one
+ # reports failure, since a caller is waiting on the answer.
+ #
+ # @env     CLAUDE_PLUGIN_DATA  Holds the slug cache
  #
  # @operand [text...]      The title
  #
@@ -663,9 +883,10 @@ auto_title::slug() {
 
   command -v jq >/dev/null 2>&1 || return 1
   (( $# )) || text="$(cat)"
-  slug="$(jq -nr --arg text "${text}" --argjson stop "${SLUG_STOPWORDS}" \
-    --argjson words "${SLUG_WORDS}" "${SLUG_JQ}"' $text | slug' \
-    2>/dev/null)"
+  slug="$(auto_title::_slug_for "${text}")"
+  [[ -n "${slug}" ]] || slug="$(jq -nr --arg text "${text}" \
+    --argjson stop "${SLUG_STOPWORDS}" --argjson words "${SLUG_WORDS}" \
+    "${SLUG_JQ}"' $text | slug' 2>/dev/null)"
   [[ -n "${slug}" ]] || return 1
   printf '%s\n' "${slug}"
 }

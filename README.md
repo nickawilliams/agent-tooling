@@ -75,13 +75,17 @@ any plugin opts in with an executable named `auto-title` beside its
 fields as JSON (or a finished title), or nothing to decline. Titles read
 `<issue> · <name> · <verb>`, so every session for one piece of work
 shares a prefix and says what the work is. The name is the slug of the
-issue's or PR's title by one fixed rule (a leading key or `Area ::`
+issue's or PR's title, two to five words picked by a short headless
+model call (Haiku, about two seconds) and cached per title under the
+plugin's data directory, or the slug already in the branch or workspace
+name, verbatim. `/auto-title:slug <title>` prints that slug from the
+same cache, and `/make-it-so` names branches with it, so a branch and
+the sessions for its issue carry the same words; `--slug <slug>` on
+`/make-it-so` overrides both. `AUTO_TITLE_SLUG_MODEL=none` in the
+launching shell uses the fixed rule instead (a leading key or `Area ::`
 dropped, an outline prefix such as `A.` kept, stopwords removed, five
-words at most, hyphenated), or the slug already in the branch or
-workspace name, verbatim. `/auto-title:slug <title>` prints that slug,
-and `/make-it-so` names branches with it, so a branch and the sessions
-for its issue carry the same words; `--slug <slug>` on `/make-it-so`
-overrides both. `/work:state-the-nature`,
+words at most), which is also the fallback when the model is
+unreachable or slow. `/work:state-the-nature`,
 `/work:ready-room`, and `/work:make-it-so` give
 `ABC-123 · timecard-sync-drops-overtime · triage`, `… · plan`, and
 `… · implement`, taking the issue from the prompt or, failing that, the
