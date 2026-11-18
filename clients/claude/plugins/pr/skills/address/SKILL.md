@@ -87,8 +87,13 @@ With no operand, work outward from the working directory:
    an open PR, that's the PR and this is the working checkout. Done.
 
    ```bash
-   gh pr view --json number,url,title,author,headRefName,state
+   gh pr list --head "$(git branch --show-current)" --state open \
+     --json number,url,title,author,headRefName --jq '.[0]'
    ```
+
+   `gh pr list --head`, not `gh pr view` with no number: the latter falls
+   back to a merged or closed PR on the branch and would send the skill
+   after feedback that no longer matters.
 
 2. **Candidate checkouts.** Otherwise the session may be in a workspace
    where several repositories or worktrees each carry their own PR, such
@@ -102,7 +107,7 @@ With no operand, work outward from the working directory:
    - When inside a checkout, that repository's other worktrees, from
      `git worktree list --porcelain`.
 
-   Dedupe by top-level path, then run the step 1 `gh pr view` in each and
+   Dedupe by top-level path, then run the step 1 `gh pr list` in each and
    keep the ones whose branch has an open PR. A candidate that fails
    (`main`, a detached HEAD, no remote) is simply not a candidate.
 

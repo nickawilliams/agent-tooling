@@ -109,9 +109,44 @@ The PR is the first argument when there is one: a number (`3442` or
 full, as `<owner>/<repo>#<n>` or a PR URL, which works from any
 directory. `gh pr view` takes a URL directly; for `<owner>/<repo>#<n>`
 pass `--repo <owner>/<repo>` and the number, to every `gh` call that
-follows as well. With no PR argument, try the current branch's PR
-(`gh pr view` with no number resolves it). If that fails, run
-`gh pr list`, show the open PRs, and ask which one.
+follows as well.
+
+With no PR argument, resolve it from the directory, the same way
+`pr:address` does:
+
+1. **The current branch.** Inside a git work tree, its open PR:
+
+   ```bash
+   gh pr list --head "$(git branch --show-current)" --state open \
+     --json number,url --jq '.[0]'
+   ```
+
+   `gh pr list --head`, not `gh pr view` with no number, which falls back
+   to a merged or closed PR on the branch.
+
+2. **Candidate checkouts.** Failing that, the session may sit in a
+   workspace where several repositories or worktrees each carry their own
+   PR. Collect the immediate subdirectories that are git work trees
+   (`git -C "$dir" rev-parse --show-toplevel`; one level only) and, inside
+   a checkout, that repository's other worktrees
+   (`git worktree list --porcelain`). Run the step 1 lookup in each, in
+   parallel, and keep the ones with an open PR. Treat a PR found this way
+   like the `<owner>/<repo>#<n>` form: take owner and repo from its URL
+   and pass `--repo` to every `gh` call that follows.
+
+3. **Pick one.** None: name the checkouts examined and stop. One: review
+   it and say it was the only PR among the checkouts here. Several: take
+   the one the conversation names, when exactly one matches (a
+   repository, directory, PR number, branch, or file path under one
+   checkout); else set aside the ones already reviewed at their current
+   head (a `review-pr-<n>.json` for that `headRefOid`, or a submitted
+   review of yours on it) and, if one remains, review it and say why.
+   Otherwise ask with `AskUserQuestion`, one option per candidate in
+   directory order, labeled `<repo>#<n>` with the title, branch, and
+   directory as the description, `multiSelect: true`. Several chosen run
+   this skill once each, in the order offered.
+
+Say how the PR was chosen whenever it wasn't named on the prompt.
 
 `--issue=<key>` names the issue the PR belongs to, such as `ABC-123`. It
 is not a decision and is never asked for: it exists so the session can be

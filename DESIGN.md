@@ -481,6 +481,12 @@ refactor, not a plain move.
   threads, and only then asked about, where picking several runs the
   phases once per PR. Every git command runs in the chosen PR's
   **working checkout**, so a sibling is never edited by mistake.
+  `review` resolves a missing operand the same way (same day), in place
+  of its old `gh pr list` prompt, which needed a checkout to begin with;
+  its tiebreak is which candidates it hasn't reviewed at their current
+  head. Both look a branch's PR up with `gh pr list --head … --state
+  open`, since `gh pr view` with no number falls back to a merged or
+  closed PR, the pitfall `make-it-so` already names.
 
 Phases, each committed to `main` on its own and leaving things working:
 
