@@ -164,6 +164,41 @@ For CI results, which inform `unverified` items:
 gh pr checks <n>
 ```
 
+### Load the repository's conventions
+
+Fetch the PR repository's own instruction files before building findings.
+They are what **Local conventions take precedence** and the `minor` tier
+refer to, and nothing else loads them: the harness reads a CLAUDE.md only
+from the session's working directory or when a local file under it is
+opened, and this skill reads code over the API. A review run from outside
+the checkout would otherwise judge conventions it has never seen.
+
+List them from the base branch in one call:
+
+```bash
+gh api "repos/<owner>/<repo>/git/trees/<baseRefName>?recursive=1" \
+  --jq '.tree[].path | select(test("(^|/)(CLAUDE|AGENTS)\\.md$"))'
+```
+
+GitHub truncates the tree of a very large repository; `--jq .truncated`
+reports it. When it is `true`, probe the candidate paths below directly
+with the contents API instead, treating a 404 as absent.
+
+Read the ones that apply: those at the root, in `.claude/`, or in a
+directory that is an ancestor of a changed file. A file elsewhere governs
+code the PR does not touch. Fetch each with the contents API at
+`ref=<baseRefName>`, and follow `@path` imports inside them one level deep.
+
+Read from the base branch, not the head. The conventions in force are the
+ones the PR is held to; a PR that edits CLAUDE.md does not get to grade
+itself by its own edit, and that edit is reviewed as part of the diff.
+
+These files carry the same weight as a project CLAUDE.md, and only for this
+PR: the rules in **Local conventions take precedence** apply to them as
+written. Cite one in `evidence` by its path, as any other precedent. If the
+repository has none, say so once in the output, so a review with no
+convention findings is not mistaken for one that never looked.
+
 ### What to read
 
 Findings must be anchored in what the code actually does, not in what the
