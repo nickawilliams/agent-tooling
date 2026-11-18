@@ -469,6 +469,19 @@ refactor, not a plain move.
   one, or if the stale reactions prove annoying enough to warrant a Slack
   token and `reactions.remove` by hand.
 
+- `address` resolves its PR from the surroundings (2026-11-18). The
+  operand forms match `review`: a bare number for the current checkout's
+  repository, or `<owner>/<repo>#<n>` or a URL from anywhere. With no
+  operand and no PR on the current branch, it looks one level down for
+  checkouts and at the current repository's other worktrees, since a
+  foreman workspace holds one worktree per repository and each carries
+  its own PR, and the session often sits at the workspace root. One
+  candidate with a PR is used and the choice reported; several are
+  narrowed by what the conversation names, then by which has unresolved
+  threads, and only then asked about, where picking several runs the
+  phases once per PR. Every git command runs in the chosen PR's
+  **working checkout**, so a sibling is never edited by mistake.
+
 Phases, each committed to `main` on its own and leaving things working:
 
 1. **Move `review`.** *Done 2026-10-28.* Root `marketplace.json`,

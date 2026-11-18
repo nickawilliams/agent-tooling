@@ -2,13 +2,16 @@
 name: address
 description: >
   Address review feedback on a pull request. Fetches the unresolved inline
-  review threads on the current branch's PR (or a given PR number) from any
-  reviewer, human or bot, triages each, then works through them one at a
-  time: discussing the ambiguous ones, applying fixes, replying on every
-  thread, and resolving it. Use when the user says "address feedback",
-  "address review comments", "fix review comments", "process PR feedback",
-  "coderabbit", or "address CR feedback".
-argument-hint: "[pr-number] [--from=<login,...>] [--resolve=<on|off>] [--autofix]"
+  review threads on a PR from any reviewer, human or bot, triages each,
+  then works through them one at a time: discussing the ambiguous ones,
+  applying fixes, replying on every thread, and resolving it. The PR is
+  the one given, else the current branch's, else inferred from the
+  checkouts around the working directory, so it works from a workspace
+  of several repos or worktrees that each have their own PR. Use when the
+  user says "address feedback", "address review comments", "fix review
+  comments", "process PR feedback", "coderabbit", or "address CR
+  feedback".
+argument-hint: "[pr-number | owner/repo#n | pr-url] [--from=<login,...>] [--resolve=<on|off>] [--autofix]"
 ---
 
 # Address review feedback
@@ -17,7 +20,7 @@ argument-hint: "[pr-number] [--from=<login,...>] [--resolve=<on|off>] [--autofix
 
 | Argument | Default | Meaning |
 |---|---|---|
-| `[pr-number]` | current branch's PR | The PR to work on |
+| `[pr]` | inferred, see **Resolve the PR** | The PR to work on: a number (`3442` or `#3442`) in the current checkout's repository, or `<owner>/<repo>#<n>` or a PR URL from any directory |
 | `--from=<login,...>` | everyone but you | Only threads started by these logins. A login matches on prefix, so `coderabbitai` also matches `coderabbitai[bot]` |
 | `--resolve=<on\|off>` | `on` | Whether a thread is resolved after its reply, for fixes and skips alike. Every fixed or skipped thread gets a reply either way |
 | `--autofix` | off | After triage, skip the prompt and go straight to **FIX**. Discuss items stay open |
@@ -41,16 +44,103 @@ conversation comments can't be resolved, so they aren't tracked here.
 
 ## TRIAGE
 
-### 1. Identify the PR
+### 1. Resolve the PR
 
-If a PR number was given, use it. Otherwise find the current branch's PR:
+The outcome of this step is one PR and its **working checkout**: the
+directory whose checked-out branch is the PR's head. Every git command in
+this skill runs in the working checkout, every `gh` call that depends on
+the current directory takes `--repo <owner>/<repo>`, and the FIX subagents
+get it as their repo root. Take `{owner}/{repo}` from the PR's `url`.
+Record the PR author's login and your own (`gh api user --jq .login`).
+
+Say how the PR was chosen whenever it wasn't named on the prompt.
+
+#### From an operand
+
+A PR named in full, as `<owner>/<repo>#<n>` or a URL, works from any
+directory: `gh pr view <url>` takes the URL directly, and
+`<owner>/<repo>#<n>` becomes `--repo <owner>/<repo>` plus the number.
+
+A bare number names a PR in the current checkout's repository. Outside a
+checkout, or when that repository has no such PR, look for it among the
+**candidate checkouts** (below): the candidate whose repository has an
+open PR with that number. If two candidates' repositories both do, ask
+which (the question below, with the two as options).
 
 ```bash
-gh pr view --json number,url,title,author
+gh pr view <n> --repo <owner>/<repo> \
+  --json number,url,title,author,headRefName,state
 ```
 
-If the branch has no PR, say so and stop. Record the PR author's login and
-your own (`gh api user --jq .login`).
+The working checkout is the current checkout when its branch is the PR's
+`headRefName`, else the candidate checkout whose branch is. With neither,
+TRIAGE and DISCUSS still work, since they read the PR over the API; say up
+front that no local checkout of `<headRefName>` was found and that FIX
+needs one, and stop at the start of FIX if it comes to that.
+
+#### From the directory
+
+With no operand, work outward from the working directory:
+
+1. **The current checkout.** When the working directory is inside a git
+   work tree (`git rev-parse --show-toplevel` succeeds) and its branch has
+   an open PR, that's the PR and this is the working checkout. Done.
+
+   ```bash
+   gh pr view --json number,url,title,author,headRefName,state
+   ```
+
+2. **Candidate checkouts.** Otherwise the session may be in a workspace
+   where several repositories or worktrees each carry their own PR, such
+   as a directory of worktrees cut for one issue, or a checkout of one
+   repository with sibling worktrees. Collect the candidates, in parallel:
+
+   - The immediate subdirectories of the working directory that are git
+     work trees: `git -C "$dir" rev-parse --show-toplevel` for each
+     `*/`. One level only; a directory of many workspaces is too broad to
+     guess from.
+   - When inside a checkout, that repository's other worktrees, from
+     `git worktree list --porcelain`.
+
+   Dedupe by top-level path, then run the step 1 `gh pr view` in each and
+   keep the ones whose branch has an open PR. A candidate that fails
+   (`main`, a detached HEAD, no remote) is simply not a candidate.
+
+3. **Pick one.**
+
+   - **No candidate has a PR.** Name the checkouts that were examined
+     and stop.
+   - **Exactly one does.** Use it, and say so: *No PR for this directory;
+     using `<repo>#<n>` from `<dir>`, the only PR among the checkouts
+     here.*
+   - **Several do.** Infer first, ask last:
+
+     1. **The conversation.** The user's message, or the session before
+        it, may name one: a repository or directory, a PR number or
+        branch, a file path under one checkout, or a reviewer who
+        commented on just one of them. One clear match wins; say what
+        matched.
+     2. **The feedback.** Fetch the unresolved thread count for each
+        candidate with the step 2 query, filtered as step 2 filters
+        (not yours, and `--from` when passed). Exactly one candidate
+        with unresolved threads wins, since the others have nothing to
+        address; say so. None with unresolved threads: report the
+        candidates and that every thread on each is resolved, and stop.
+     3. **Ask.** Otherwise ask with `AskUserQuestion`, one option per
+        candidate, in directory order:
+
+        ```
+        question: "Several checkouts here have open PRs. Which should I address?"
+        header: "Which PR"
+        options:
+          - label: "<repo>#<n>"
+            description: "<title> — <headRefName> in <dir>, <k> unresolved threads"
+        multiSelect: true
+        ```
+
+        Choosing several runs the phases below once per PR, in the order
+        offered, each with its own working checkout, item list, and
+        prompt. Finish one PR's FIX before starting the next TRIAGE.
 
 ### 2. Fetch the threads
 
@@ -82,9 +172,6 @@ gh api graphql -f query='
   }'
 ```
 
-Get `{owner}/{repo}` from `gh repo view --json nameWithOwner --jq
-.nameWithOwner` if needed.
-
 Keep a thread when the login of its **first** comment:
 
 - isn't yours, and
@@ -100,8 +187,8 @@ differs for bots and humans.
 
 Spawn one subagent per **unresolved** thread, **in parallel**, with the
 Agent tool. Pass each one the whole conversation (every comment, in order,
-with its author), the file path, line, diff hunk, and repo root, plus this
-instruction:
+with its author), the file path, line, diff hunk, and the working checkout
+as the repo root, plus this instruction:
 
 > Read the file and examine the flagged code in context. The **latest**
 > comments carry the current state of the discussion: a reviewer may have
@@ -225,11 +312,13 @@ conflicts.
 
 Before spawning the first subagent, work out from the repo and session:
 
-- **Repo root**: the absolute path.
-- **Commit convention**: read `CLAUDE.md` and `AGENTS.md`, and run
-  `git log --oneline -20`. Match the subject format the history uses,
-  including a ticket key as scope when the history does so and the branch
-  name carries one (e.g. `feature/EX-30696_…` → `EX-30696`).
+- **Repo root**: the working checkout from step 1, as an absolute path.
+  Without one, stop here: fixes need a checkout of the PR's branch.
+- **Commit convention**: read `CLAUDE.md` and `AGENTS.md` in the working
+  checkout, and run `git log --oneline -20` there. Match the subject
+  format the history uses, including a ticket key as scope when the
+  history does so and the branch name carries one (e.g.
+  `feature/EX-30696_…` → `EX-30696`).
 - **Commit trailer**: the attribution trailer this session's instructions
   specify, if any. Don't invent one.
 - **Checks**: the formatter, typecheck, and test commands, from `CLAUDE.md`
@@ -305,7 +394,8 @@ the PR doesn't sit on a stale "changes requested". Read each reviewer's
 latest review and the current requests:
 
 ```bash
-gh pr view {pr_number} --json latestReviews,reviewRequests,author
+gh pr view {pr_number} --repo {owner}/{repo} \
+  --json latestReviews,reviewRequests,author
 ```
 
 Re-request a reviewer when all of these hold:
@@ -317,10 +407,10 @@ Re-request a reviewer when all of these hold:
 - Every inline thread they started is now resolved; a deferred thread
   counts as unresolved. A review whose summary asks for changes with no
   inline thread counts as handled only once a PR comment answers it.
-- The fixes are on the remote: the branch has no unpushed commits
-  (`git rev-list --count @{upstream}..HEAD` prints `0`). This skill
-  doesn't push, so when commits are unpushed, name the reviewers that
-  would be re-requested and say they wait for the push.
+- The fixes are on the remote: the working checkout has no unpushed
+  commits (`git rev-list --count @{upstream}..HEAD` prints `0` there).
+  This skill doesn't push, so when commits are unpushed, name the
+  reviewers that would be re-requested and say they wait for the push.
 
 ```bash
 gh api --method POST \
@@ -334,6 +424,9 @@ Report who was re-requested, and who wasn't and why.
 
 ## Notes
 
+- In a workspace of several checkouts, the working checkout is the only
+  one touched. Don't read, edit, or commit in a sibling, even when a
+  thread's path happens to exist there too.
 - A comment on an outdated diff position may not map onto the current
   file. Read the file fresh rather than trusting the line number.
 - When a request conflicts with documented project conventions, follow the
