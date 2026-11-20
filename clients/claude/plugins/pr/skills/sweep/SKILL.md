@@ -213,9 +213,9 @@ comments skipped as already present, review link, anything it listed as
 appended to a bodyless pending review. Not its report. Ten full reports
 defeat the point of fanning out.
 
-If a review fails, react `:warning:` to its Slack message, if it has one.
-The connector cannot remove a reaction, so the `:eyes:` cannot be taken
-back; the warning is what keeps the message visible as needing attention.
+If a review fails, say so in the output and leave its Slack message
+alone. `:eyes:` says the message was seen and acted on, which stays true,
+and the failure is the invoker's to deal with, not the channel's.
 
 ## 4. Mark resolved reviews
 
