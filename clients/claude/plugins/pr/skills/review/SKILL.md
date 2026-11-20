@@ -1175,7 +1175,7 @@ network blip does not read as a closed PR.
    last submitted review. Replies alone do not justify an empty review.
    When a review is submitted, set the Slack post's outcome reaction from
    its event, as **The Slack post** describes. This is what turns a post
-   marked `:requested-changes:` in round one into `:white_check_mark:` on
+   marked `:pr-changes-requested:` in round one into `:pr-approved:` on
    the round that approves.
 6. Restart the watcher with `reviewed` set to the new head, unless the stop
    condition below holds.
@@ -1288,16 +1288,16 @@ with, which stage 6 already wrote down. The middle column is how GitHub
 reports that review afterwards, which is what **A post with several PRs**
 reads for the other PRs on a post.
 
-| Event             | Your review shows as | Reaction              |
-| ----------------- | -------------------- | --------------------- |
-| `APPROVE`         | `APPROVED`           | `:white_check_mark:`  |
-| `REQUEST_CHANGES` | `CHANGES_REQUESTED`  | `:requested-changes:` |
-| `COMMENT`         | `COMMENTED`          | `:repeat:`            |
+| Event             | Your review shows as | Reaction                 |
+| ----------------- | -------------------- | ------------------------ |
+| `APPROVE`         | `APPROVED`           | `:pr-approved:`          |
+| `REQUEST_CHANGES` | `CHANGES_REQUESTED`  | `:pr-changes-requested:` |
+| `COMMENT`         | `COMMENTED`          | `:pr-commented:`         |
 
 `pr:sweep` searches for these three names when it catches up posts, so its
-table and this one must agree. `:requested-changes:` is a custom emoji and
-has to exist in the workspace. If adding it fails with `invalid_name`, say
-so and leave the post as it was; do not substitute another emoji.
+table and this one must agree. All three are custom emoji and have to
+exist in the workspace. If adding one fails with `invalid_name`, say so
+and leave the post as it was; do not substitute another emoji.
 
 Exactly one of the three should be yours at any time, and it is the one for
 your latest submitted review. After reading the post's reactions:
@@ -1306,16 +1306,16 @@ your latest submitted review. After reading the post's reactions:
    there is nothing to do. Say nothing beyond the one-line Slack note.
 2. Add the target reaction when it is missing.
 3. Remove each of the other two that is yours, with `slack_remove_reaction`.
-   This is the step that flips a post from `:requested-changes:` to
-   `:white_check_mark:` when a watched PR is approved on a later round.
+   This is the step that flips a post from `:pr-changes-requested:` to
+   `:pr-approved:` when a watched PR is approved on a later round.
 
 The connector may offer no way to remove a reaction: as of 2026-11-10 the
 claude.ai Slack connector has `slack_add_reaction` and `slack_get_reactions`
 and nothing for removal. When there is no remove tool, add the target
 anyway, and say in the output which stale reaction is still on the post so
 it can be removed by hand. Two outcome reactions on one post is worse than
-one, but a post that still says `:requested-changes:` after an approval is
-worse than both.
+one, but a post that still says `:pr-changes-requested:` after an
+approval is worse than both.
 
 Under `--comments=post` and `--comments=none`, nothing here runs. A pending
 review is not an outcome anyone in the channel can see, and the post stays

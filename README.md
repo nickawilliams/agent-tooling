@@ -47,8 +47,9 @@ else the foreman project the working directory is in (its
 `notification.channels.review`, the channel `foreman review` announces
 PRs in), else the plugin's `slack_channel` setting (in `/config`).
 `/pr:review` marks the post linking the PR with `:eyes:` when it starts
-and with `:white_check_mark:`, `:requested-changes:`, or `:repeat:` once a
-review is submitted, flipping the outcome as later rounds change it.
+and with `:pr-approved:`, `:pr-changes-requested:`, or `:pr-commented:`
+once a review is submitted, flipping the outcome as later rounds change
+it.
 `/pr:sweep` finds unreviewed PRs there and catches up posts whose reviews
 were submitted elsewhere. Leave the setting empty to skip Slack.
 

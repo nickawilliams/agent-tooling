@@ -229,19 +229,19 @@ today, and a window that hides it would mean the message never resolves.
 Search the channel's whole history for the unresolved set:
 
 ```
-in:#<channel> hasmy::eyes: -hasmy::white_check_mark:
-  -hasmy::requested-changes: -hasmy::repeat:
+in:#<channel> hasmy::eyes: -hasmy::pr-approved:
+  -hasmy::pr-changes-requested: -hasmy::pr-commented:
 ```
 
 For each, check every PR the message links. Once all of them carry a
 submitted review of yours, react with the most blocking outcome across
 them:
 
-| Your latest review  | Reaction              |
-| ------------------- | --------------------- |
-| `CHANGES_REQUESTED` | `:requested-changes:` |
-| `COMMENTED`         | `:repeat:`            |
-| `APPROVED`          | `:white_check_mark:`  |
+| Your latest review  | Reaction                 |
+| ------------------- | ------------------------ |
+| `CHANGES_REQUESTED` | `:pr-changes-requested:` |
+| `COMMENTED`         | `:pr-commented:`         |
+| `APPROVED`          | `:pr-approved:`          |
 
 Precedence runs down that table. A commented review counts as resolved: it
 is a deliberate way to leave feedback without gating the merge, not an

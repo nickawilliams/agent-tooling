@@ -451,8 +451,9 @@ refactor, not a plain move.
   number, title, and branch. REST, because the cloud GitHub proxy
   rejects GraphQL and with it `gh pr view`.
 - `review` marks the PR's Slack post (2026-11-10): `:eyes:` when it
-  starts, then `:white_check_mark:`, `:requested-changes:`, or `:repeat:`
-  for the event it submits with, flipped on later watch rounds. Every
+  starts, then `:pr-approved:`, `:pr-changes-requested:`, or
+  `:pr-commented:` for the event it submits with, flipped on later watch
+  rounds. Every
   write reads the post first and is a no-op when the post is already
   right, since `sweep` and `automate` reach the same post. The channel is
   the first of `--channel`, the foreman project the cwd is in
