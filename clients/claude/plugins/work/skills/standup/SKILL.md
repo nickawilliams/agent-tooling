@@ -119,23 +119,32 @@ Print this, and nothing before it:
 **Standup · <Ddd Mmm D>** — covers <Ddd>–<Ddd>, only when the window spans more than one day>
 
 **Yesterday**
-- [PROJ-412](https://example.atlassian.net/browse/PROJ-412) Billing export: fixed QA findings, ephemeral updated
+- Shipped the billing export fixes
+- Fixed QA findings on the legacy migration, ephemeral updated
   - QA by Sam + Priya
-- Reviewed Lee's [api#3704](https://github.com/example/api/pull/3704), [#3705](https://github.com/example/api/pull/3705)
+- Reviewed Lee's [api#3704](https://github.com/example/api/pull/3704)
 **Today**
-- [PROJ-430](https://example.atlassian.net/browse/PROJ-430): start legacy migration, PR by EOD
-- 14:00 PROJ-430 sync w/ Jo
+- Merge [api#3710](https://github.com/example/api/pull/3710), triage [PROJ-430](https://example.atlassian.net/browse/PROJ-430) QA findings
 **Blockers**
 - none
 ```
 
 Rules:
 
-- At most four bullets per section, each under about 70 characters.
-  Lead with the issue key when there is one. Drop the least important
-  units before you exceed the limit. The limit counts visible text, not
-  link URLs.
-- Every Jira key and PR is a Markdown link. Jira:
+- Keep it short. At most four bullets per section and each under about
+  60 characters, but those are ceilings, not targets: two or three
+  bullets is typical, and fewer is better. Drop the least important
+  units first. The limit counts visible text, not link URLs.
+- Describe the work in plain prose, not by ticket number: `Shipped both
+  SSRF fixes`, not `EX-35251 + EX-35252 SSRF fixes shipped`. Include a
+  Jira key or PR only where a listener would use it: a PR someone needs
+  to review or that is about to merge, a ticket where findings or
+  discussion live, someone else's PR they reviewed. Aim for no more than
+  one or two links in a whole section.
+- Leave out work on the user's own developer tooling and workflow
+  automation (CLI helpers, notification formatting, agent skills).
+  Teammates don't track it, even when it has a ticket.
+- Every Jira key and PR that does appear is a Markdown link. Jira:
   `https://<jira_site>/browse/<KEY>`. PRs: the URL from `gh`, labeled
   `<repo>#<n>`; later PRs from the same repo in one bullet can shorten to
   `#<n>`.
@@ -151,7 +160,7 @@ Rules:
   tickets, a QA session for their feature, a design review they called.
   Leave out all-hands, team rituals, and recurring meetings with no
   ticket attached.
-- A blocker names who or what it waits on: `PROJ-436 PR waiting on
+- A blocker names who or what it waits on: `Migration PR waiting on
   review from Alex since Thu`. A stale review request or an unanswered
   question is a blocker candidate; a vague worry is not.
 - Names:
@@ -175,9 +184,10 @@ T: <today items>
 B: <blockers or none>
 ```
 
-Jira keys and PRs in the block are Markdown links, same URLs and labels
-as the notes; Slack's composer turns them into links on paste. When
-posting for the user with `slack_send_message`, pass the same Markdown.
+The block carries the same items and links as the notes, no more:
+don't add keys or PRs the notes left out. Links are Markdown; Slack's
+composer turns them into links on paste. When posting for the user with
+`slack_send_message`, pass the same Markdown.
 
 Offer to post it to `standup_channel`. Never post without an explicit
 yes. Don't offer in past mode.
