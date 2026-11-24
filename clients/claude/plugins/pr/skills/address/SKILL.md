@@ -11,7 +11,7 @@ description: >
   user says "address feedback", "address review comments", "fix review
   comments", "process PR feedback", "coderabbit", or "address CR
   feedback".
-argument-hint: "[pr-number | owner/repo#n | pr-url] [--from=<login,...>] [--resolve=<on|off>] [--autofix]"
+argument-hint: "[pr-number | repo#n | owner/repo#n | pr-url] [--from=<login,...>] [--resolve=<on|off>] [--autofix]"
 ---
 
 # Address review feedback
@@ -20,7 +20,7 @@ argument-hint: "[pr-number | owner/repo#n | pr-url] [--from=<login,...>] [--reso
 
 | Argument | Default | Meaning |
 |---|---|---|
-| `[pr]` | inferred, see **Resolve the PR** | The PR to work on: a number (`3442` or `#3442`) in the current checkout's repository, or `<owner>/<repo>#<n>` or a PR URL from any directory |
+| `[pr]` | inferred, see **Resolve the PR** | The PR to work on: a number (`3442` or `#3442`) in the current checkout's repository, or `<repo>#<n>`, `<owner>/<repo>#<n>`, or a PR URL from any directory |
 | `--from=<login,...>` | everyone but you | Only threads started by these logins. A login matches on prefix, so `coderabbitai` also matches `coderabbitai[bot]` |
 | `--resolve=<on\|off>` | `on` | Whether a thread is resolved after its reply, for fixes and skips alike. Every fixed or skipped thread gets a reply either way |
 | `--autofix` | off | After triage, skip the prompt and go straight to **FIX**. Discuss items stay open |
@@ -60,6 +60,17 @@ Say how the PR was chosen whenever it wasn't named on the prompt.
 A PR named in full, as `<owner>/<repo>#<n>` or a URL, works from any
 directory: `gh pr view <url>` takes the URL directly, and
 `<owner>/<repo>#<n>` becomes `--repo <owner>/<repo>` plus the number.
+
+`<repo>#<n>` names the repository without its owner, and is resolved as
+`pr:review` resolves it. The owner is the first of these under which the
+PR exists: a checkout here whose `origin` remote is that repository (the
+working directory's, or a **candidate checkout**'s, below), the current
+checkout's owner, your login (`gh api user --jq .login`), your
+organizations (`gh api user/orgs --jq '.[].login'`). Probe each with
+`gh api repos/<owner>/<repo>/pulls/<n> --jq .html_url`, stop at the first
+that answers, and from there treat it as `<owner>/<repo>#<n>`. Say which
+owner was resolved. If none answers, say which owners were tried and
+stop.
 
 A bare number names a PR in the current checkout's repository. Outside a
 checkout, or when that repository has no such PR, look for it among the

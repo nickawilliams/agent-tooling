@@ -472,7 +472,8 @@ refactor, not a plain move.
   current checkout's owner, the account's login, its organizations
   (asked only when the directory's owners miss). With no owner found
   the handler still gives `review → <repo>#<n>`; the skill stops and
-  names the owners it tried. `address` does not take the form yet.
+  names the owners it tried. `address` takes the form too, resolved
+  the same way, so the two skills' operands stay the same.
 - `review` marks the PR's Slack post (2026-11-10): `:eyes:` when it
   starts, then `:pr-approved:`, `:pr-changes-requested:`, or
   `:pr-commented:` for the event it submits with, flipped on later watch
@@ -495,7 +496,8 @@ refactor, not a plain move.
 
 - `address` resolves its PR from the surroundings (2026-11-18). The
   operand forms match `review`: a bare number for the current checkout's
-  repository, or `<owner>/<repo>#<n>` or a URL from anywhere. With no
+  repository, or `<repo>#<n>` (since 2026-11-24), `<owner>/<repo>#<n>`,
+  or a URL from anywhere. With no
   operand and no PR on the current branch, it looks one level down for
   checkouts and at the current repository's other worktrees, since a
   foreman workspace holds one worktree per repository and each carries
