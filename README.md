@@ -94,8 +94,13 @@ branch or worktree path, and the name from the branch or workspace
 slug, else `--slug`, else from Jira when the directory is inside a
 foreman project. `/pr:review` (or bare `/review`) gives
 `ABC-123 · timecard-sync-drops-overtime · review → <repo>#<n>`, taking
-the issue from `--issue=<key>`, else the PR's title, else its branch
-name, and the name from the branch's slug, else the PR's title.
+the issue from `--issue=<key>`, else the PR's branch name, else its
+title, and the name from the branch's slug, else the PR's title. The PR
+is the one on the prompt (`3442`, `api#3442`, `acme/api#3442`, or a
+URL), else the current branch's, else the only open one among the
+checkouts below the working directory; when several have one,
+`/pr:review` picks and names the `/auto-title` command that titles the
+session.
 `/work:15five` gives `15five.check-in → 2026-W39`, the ISO week of the
 check-in, and `/work:standup` gives `standup → 2026-11-06`, the
 reference day. An unknown field is dropped

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #?/name     auto-title — Session title fields for a pull request review
-#?/version  3.1.0
+#?/version  3.2.0
 #?/synopsis auto-title < hook-payload.json
 #?/description
  # Handler for the auto-title plugin, which runs it when a prompt
@@ -13,25 +13,35 @@
  # PR to name it prints nothing, which auto-title treats as declining.
  #
  # The PR is the prompt's first operand: a number (with or without `#`),
- # `<owner>/<repo>#<n>`, or a PR URL. The last two also name the repo;
- # a bare number leaves that to the `origin` remote, so outside a
- # checkout the full form is required, as it is for the skill. With no
- # operand, the open PR for the current branch. One REST call then
- # fetches the PR's number, title, and head branch. REST, because in a
- # cloud session the GitHub proxy rejects GraphQL, which `gh pr` is
- # built on. A cloud clone also has no remote, so a bare number there
- # yields only the target, `#<n>`.
+ # `<repo>#<n>`, `<owner>/<repo>#<n>`, or a PR URL. The last two name
+ # the repository outright. A bare number leaves it to the `origin`
+ # remote, so outside a checkout a fuller form is required, as it is
+ # for the skill. `<repo>#<n>` names no owner, so the owner is the first
+ # of these under which the PR exists: a checkout here whose remote is
+ # that repository, the current checkout's owner, your GitHub login,
+ # your organizations.
+ #
+ # With no operand, the PR is found the way the skill finds it: the
+ # open PR for the current branch, else the one open PR among the
+ # checkouts one level down and the repository's other worktrees. When
+ # several of those have one, the skill picks from the conversation or
+ # asks, which a hook can't, so this declines and the skill names the
+ # `/auto-title` command that titles the session afterwards.
+ #
+ # Every lookup is REST, because in a cloud session the GitHub proxy
+ # rejects GraphQL, which `gh pr` is built on. A cloud clone also has
+ # no remote, so a bare number there yields only the target, `#<n>`.
  #
  # The issue is the first of: `--issue=<key>` in the prompt, a key in
- # the PR's title, a key in its branch name. The name is the slug after
+ # the PR's branch name, a key in its title. The name is the slug after
  # the key in the branch name, which is hand-written to be short and is
  # kept in its own casing, else the PR's title, which the plugin
  # lowercases and strips the key from.
  #
  # auto-title runs it in the session's working directory, so git and gh
  # resolve the repo the way the review itself does. Needs bash, git,
- # and jq; gh only for the lookup. No module-sh, as with every script a
- # hook runs here.
+ # and jq; gh only for the lookups. No module-sh, as with every script
+ # a hook runs here.
  ##
 
 set -uo pipefail
@@ -65,16 +75,203 @@ auto_title::_key() {
   done
 }
 
+# Separates fields within one line of a helper's output.
+readonly SEP=$'\x1f'
+
+# The jq filter for the three facts read from a PR, SEP-joined.
+# shellcheck disable=SC2016  # a jq program, not shell
+readonly PR_FIELDS='[(.number | tostring), .title, .head.ref] | join("\u001f")'
+
+# The most checkouts searched for a PR. Above it the search declines
+# rather than hold the prompt hook, or title from a partial answer.
+readonly CHECKOUT_MAX=16
+
+#@/private
+ # Print the owner and repository a checkout's `origin` remote names.
+ #
+ # Accepts every form git does: https://github.com/o/r(.git),
+ # git@github.com:o/r(.git), ssh://git@github.com/o/r. A cloud session's
+ # clone is built from a seed bundle and has no remote, so nothing is
+ # printed there.
+ #
+ # @operand <dir>          A directory inside the checkout
+ #
+ # @stdout                 `<owner>SEP<repo>`, or nothing
+ ##
+auto_title::_remote() {
+  local remote
+
+  remote="$(git -C "${1}" remote get-url origin 2>/dev/null)" || return 0
+  remote="${remote%.git}"
+  remote="${remote%/}"
+  [[ "${remote}" =~ [:/]([^/:]+)/([^/]+)$ ]] || return 0
+  printf '%s%s%s' "${BASH_REMATCH[1]}" "${SEP}" "${BASH_REMATCH[2]}"
+}
+
+#@/private
+ # Print the checkouts around the working directory, as the skill's
+ # step 1 collects them: the immediate subdirectories that are the root
+ # of a git work tree and, inside a checkout, the repository's other
+ # worktrees.
+ #
+ # @stdout                 One directory per line, possibly repeated
+ ##
+auto_title::_checkouts() {
+  local dir top line
+
+  for dir in ./*/; do
+    [[ -e "${dir}.git" ]] && printf '%s\n' "${dir%/}"
+  done
+
+  top="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
+  while IFS= read -r line; do
+    [[ "${line}" == "worktree "* ]] || continue
+    [[ "${line#worktree }" == "${top}" ]] || printf '%s\n' "${line#worktree }"
+  done < <(git worktree list --porcelain 2>/dev/null)
+}
+
+#@/private
+ # Fetch a PR by number.
+ #
+ # @operand <owner>        Repository owner
+ # @operand <repo>         Repository name
+ # @operand <number>       PR number
+ #
+ # @stdout                 `<number>SEP<title>SEP<branch>`, or nothing
+ ##
+auto_title::_pr() {
+  local found
+
+  # On a 404 gh prints the error body to stdout, so the exit status is
+  # what says whether the output is a PR.
+  found="$(gh api "repos/${1}/${2}/pulls/${3}" --jq "${PR_FIELDS}" \
+    2>/dev/null)" || return 0
+  printf '%s' "${found}"
+}
+
+#@/private
+ # Find the open PR for the branch checked out in a directory.
+ #
+ # @operand <dir>          A directory inside the checkout
+ #
+ # @stdout                 `<owner>SEP<repo>SEP<number>SEP<title>SEP<branch>`
+ #                         on one line, or nothing
+ ##
+auto_title::_branch_pr() {
+  local dir="${1}" owner="" repo="" branch found
+
+  IFS="${SEP}" read -r owner repo <<< "$(auto_title::_remote "${dir}")"
+  [[ -n "${repo}" ]] || return 0
+  branch="$(git -C "${dir}" rev-parse --abbrev-ref HEAD 2>/dev/null)" \
+    || return 0
+  [[ -n "${branch}" && "${branch}" != "HEAD" ]] || return 0
+
+  found="$(gh api \
+    "repos/${owner}/${repo}/pulls?state=open&head=${owner}:${branch}" \
+    --jq ".[0] // empty | ${PR_FIELDS}" 2>/dev/null)" || return 0
+  [[ -n "${found}" ]] \
+    && printf '%s%s%s%s%s\n' "${owner}" "${SEP}" "${repo}" "${SEP}" "${found}"
+  return 0
+}
+
+#@/private
+ # Find the one open PR among the surrounding checkouts.
+ #
+ # Looks every checkout up at once, so the wait is one call long
+ # however many there are. Several PRs is the skill's decision to make,
+ # so only a single answer is printed.
+ #
+ # @stdout                 A line as auto_title::_branch_pr prints it, when
+ #                         exactly one checkout has an open PR
+ ##
+auto_title::_nearby_pr() {
+  local dir tmp found i=0
+  local -a dirs=()
+
+  while IFS= read -r dir; do
+    dirs+=("${dir}")
+  done < <(auto_title::_checkouts | sort -u)
+  (( ${#dirs[@]} > 0 && ${#dirs[@]} <= CHECKOUT_MAX )) || return 0
+
+  tmp="$(mktemp -d 2>/dev/null)" || return 0
+  for dir in "${dirs[@]}"; do
+    auto_title::_branch_pr "${dir}" > "${tmp}/${i}" &
+    i=$(( i + 1 ))
+  done
+  wait
+  found="$(cat "${tmp}"/* 2>/dev/null | sort -u)"
+  rm -rf "${tmp}"
+
+  [[ -n "${found}" && "${found}" != *$'\n'* ]] && printf '%s' "${found}"
+  return 0
+}
+
+#@/private
+ # Print the owners a repository named without one may belong to, as
+ # far as the directory tells: the owner of each checkout here whose
+ # remote is that repository, then the current checkout's owner.
+ #
+ # @operand <repo>         Repository name
+ #
+ # @stdout                 One owner per line, possibly repeated
+ ##
+auto_title::_local_owners() {
+  local repo="${1}" dir owner name here=""
+
+  while IFS= read -r dir; do
+    owner=""
+    name=""
+    IFS="${SEP}" read -r owner name <<< "$(auto_title::_remote "${dir}")"
+    [[ "${dir}" == "." ]] && here="${owner}"
+    [[ -n "${owner}" && "${name}" == "${repo}" ]] && printf '%s\n' "${owner}"
+  done < <(printf '.\n'; auto_title::_checkouts)
+  [[ -n "${here}" ]] && printf '%s\n' "${here}"
+  return 0
+}
+
+#@/private
+ # Find a PR in a repository named without its owner.
+ #
+ # Tries the owners the directory suggests, then the account's login
+ # and organizations, and stops at the first under which the PR exists.
+ # The account is asked only when the directory's owners all miss.
+ #
+ # @operand <repo>         Repository name
+ # @operand <number>       PR number
+ #
+ # @stdout                 `<owner>SEP<number>SEP<title>SEP<branch>`, or
+ #                         nothing
+ ##
+auto_title::_owned_pr() {
+  local repo="${1}" number="${2}" owner found tried=" "
+
+  while IFS= read -r owner; do
+    [[ -n "${owner}" && "${tried}" != *" ${owner} "* ]] || continue
+    tried+="${owner} "
+    found="$(auto_title::_pr "${owner}" "${repo}" "${number}")"
+    if [[ -n "${found}" ]]; then
+      printf '%s%s%s' "${owner}" "${SEP}" "${found}"
+      return 0
+    fi
+  done < <(
+    auto_title::_local_owners "${repo}"
+    gh api user --jq '.login' 2>/dev/null
+    gh api user/orgs --jq '.[].login' 2>/dev/null
+  )
+}
+
 payload="$(cat)"
 
 command -v jq >/dev/null 2>&1 || exit 0
 command -v git >/dev/null 2>&1 || exit 0
 
+have_gh=0
+command -v gh >/dev/null 2>&1 && have_gh=1
+
 prompt="$(jq -r '.prompt // empty' <<< "${payload}")"
-ref=""
 
 # The first operand, if the prompt has one. Anything that isn't one of
-# the PR forms below, such as a flag, means "the current branch's PR".
+# the PR forms below, such as a flag, means "find the PR here".
 operand=""
 if [[ "${prompt}" =~ ^/[^[:space:]]+[[:space:]]+([^[:space:]]+) ]]; then
   operand="${BASH_REMATCH[1]}"
@@ -89,24 +286,13 @@ elif [[ "${operand}" =~ ^([^/#[:space:]]+)/([^/#[:space:]]+)#([0-9]+)$ ]]; then
   owner="${BASH_REMATCH[1]}"
   repo="${BASH_REMATCH[2]}"
   number="${BASH_REMATCH[3]}"
+elif [[ "${operand}" =~ ^([^/#[:space:]]+)#([0-9]+)$ ]]; then
+  repo="${BASH_REMATCH[1]}"
+  number="${BASH_REMATCH[2]}"
 elif [[ "${operand}" =~ ^https?://[^/]+/([^/]+)/([^/]+)/pull/([0-9]+) ]]; then
   owner="${BASH_REMATCH[1]}"
   repo="${BASH_REMATCH[2]}"
   number="${BASH_REMATCH[3]}"
-fi
-
-# Otherwise, owner and repo from the remote, in any of the forms git
-# accepts: https://github.com/o/r(.git), git@github.com:o/r(.git),
-# ssh://git@github.com/o/r. A cloud session's clone is built from a seed
-# bundle and has no remote at all, so both stay empty there.
-if [[ -z "${repo}" ]]; then
-  remote="$(git remote get-url origin 2>/dev/null)" || remote=""
-  remote="${remote%.git}"
-  remote="${remote%/}"
-  if [[ "${remote}" =~ [:/]([^/:]+)/([^/]+)$ ]]; then
-    owner="${BASH_REMATCH[1]}"
-    repo="${BASH_REMATCH[2]}"
-  fi
 fi
 
 # An explicit --issue wins: a Jira key in any case, or an issue number.
@@ -120,30 +306,38 @@ if [[ "${prompt}" =~ (^|[[:space:]])--issue[=[:space:]]+([^[:space:]]+) ]]; then
   fi
 fi
 
-# One call to GitHub, when there is a repo to ask about: the name needs
-# the PR's title, and a missing number needs the branch's PR.
+# The PR's number, title, and branch, by whichever route the operand
+# leaves open. Without gh, or when nothing is found, the operand's own
+# number and repository still make a target.
 pr_title=""
-if [[ -n "${repo}" ]] && command -v gh >/dev/null 2>&1; then
-  fields='[(.number | tostring), .title, .head.ref] | join("\u001f")'
-  if [[ -n "${number}" ]]; then
-    found="$(gh api "repos/${owner}/${repo}/pulls/${number}" \
-      --jq "${fields}" 2>/dev/null)" || found=""
-  else
-    branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" || branch=""
-    found=""
-    if [[ -n "${branch}" && "${branch}" != "HEAD" ]]; then
-      found="$(gh api \
-        "repos/${owner}/${repo}/pulls?state=open&head=${owner}:${branch}" \
-        --jq ".[0] // empty | ${fields}" 2>/dev/null)" || found=""
-    fi
+ref=""
+found=""
+if [[ -n "${number}" && -n "${repo}" && -z "${owner}" ]]; then
+  # <repo>#<n>: the PR is what tells which owner was meant.
+  if (( have_gh )); then
+    IFS="${SEP}" read -r owner found \
+      <<< "$(auto_title::_owned_pr "${repo}" "${number}")"
   fi
+elif [[ -n "${number}" ]]; then
+  # A bare number belongs to the current checkout's repository.
+  if [[ -z "${repo}" ]]; then
+    IFS="${SEP}" read -r owner repo <<< "$(auto_title::_remote .)"
+  fi
+  if [[ -n "${repo}" ]] && (( have_gh )); then
+    found="$(auto_title::_pr "${owner}" "${repo}" "${number}")"
+  fi
+elif (( have_gh )); then
+  # No PR named: the current branch's, else the only one nearby.
+  line="$(auto_title::_branch_pr .)"
+  [[ -n "${line}" ]] || line="$(auto_title::_nearby_pr)"
+  [[ -z "${line}" ]] || IFS="${SEP}" read -r owner repo found <<< "${line}"
+fi
 
-  if [[ -n "${found}" ]]; then
-    IFS=$'\x1f' read -r found_number pr_title ref <<< "${found}"
-    number="${number:-${found_number}}"
-    [[ -n "${issue}" ]] || issue="$(auto_title::_key "${pr_title}")"
-    [[ -n "${issue}" ]] || issue="$(auto_title::_key "${ref}")"
-  fi
+if [[ -n "${found}" ]]; then
+  IFS="${SEP}" read -r found_number pr_title ref <<< "${found}"
+  number="${number:-${found_number}}"
+  [[ -n "${issue}" ]] || issue="$(auto_title::_key "${ref}")"
+  [[ -n "${issue}" ]] || issue="$(auto_title::_key "${pr_title}")"
 fi
 
 [[ -n "${number}" ]] || exit 0

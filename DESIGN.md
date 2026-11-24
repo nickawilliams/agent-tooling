@@ -437,7 +437,9 @@ refactor, not a plain move.
   plugin](#auto-title-plugin). Nearly every PR sits under an issue, and
   one issue can have PRs in several repos, so the issue leads and the
   PR is the target. The issue is the first of: `--issue=<key>` on the
-  prompt, an upper-case key in the PR's title, one in its branch name;
+  prompt, an upper-case key in the PR's branch name, one in its title
+  (branch first since 2026-11-24: the branch is named for the issue,
+  while a title can mention another one);
   a short list of look-alikes (`UTF-8`, `CVE-…`) is skipped. `--issue`
   is in the skill's argument hint for that purpose alone and plays no
   part in the review. The name is the slug after the key in the PR's
@@ -450,6 +452,27 @@ refactor, not a plain move.
   means the current branch's open PR. One REST call fetches the
   number, title, and branch. REST, because the cloud GitHub proxy
   rejects GraphQL and with it `gh pr view`.
+- The handler keeps up with how `review` resolves its PR (2026-11-24).
+  With no operand and no PR on the current branch it looks where the
+  skill does, the checkouts one level down and the repository's other
+  worktrees, all at once, and titles the session when exactly one has
+  an open PR; above sixteen checkouts it declines rather than hold the
+  prompt. Several PRs is a choice the skill makes from the conversation
+  or by asking, after the hook has run, and a bare `/auto-title` would
+  replay the same operand-less prompt, so there the skill names
+  `/auto-title /pr:review <owner>/<repo>#<n>` beside its line on how
+  the PR was chosen (only when `auto-title:slug` is an available skill,
+  since `pr` doesn't depend on the plugin). The skill can't see whether
+  a title exists, so the hint also shows in a session renamed by hand.
+- `<repo>#<n>` is an operand form of `review` and its handler
+  (2026-11-24). It was typed often enough, matched none of the
+  handler's patterns, and fell through to "the current branch's PR",
+  so the session went untitled. The owner is the first under which the
+  PR exists: a checkout here whose remote is that repository, the
+  current checkout's owner, the account's login, its organizations
+  (asked only when the directory's owners miss). With no owner found
+  the handler still gives `review → <repo>#<n>`; the skill stops and
+  names the owners it tried. `address` does not take the form yet.
 - `review` marks the PR's Slack post (2026-11-10): `:eyes:` when it
   starts, then `:pr-approved:`, `:pr-changes-requested:`, or
   `:pr-commented:` for the event it submits with, flipped on later watch

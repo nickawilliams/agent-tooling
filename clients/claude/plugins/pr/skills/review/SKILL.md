@@ -1,7 +1,7 @@
 ---
 name: review
 description: Review a pull request. Use when the user runs /pr:review, asks to review a PR, or wants feedback on changes in a pull request.
-argument-hint: "[pr-number | owner/repo#n | pr-url] [--issue=<key>] [--channel=<name>] [--comments=<none|post|submit>] [--level=<severity>] [--watch=<off|on>] [--fresh]"
+argument-hint: "[pr-number | repo#n | owner/repo#n | pr-url] [--issue=<key>] [--channel=<name>] [--comments=<none|post|submit>] [--level=<severity>] [--watch=<off|on>] [--fresh]"
 ---
 
 Review pull request $ARGUMENTS and produce a review in two stages: build a
@@ -111,6 +111,17 @@ directory. `gh pr view` takes a URL directly; for `<owner>/<repo>#<n>`
 pass `--repo <owner>/<repo>` and the number, to every `gh` call that
 follows as well.
 
+`<repo>#<n>` names the repository without its owner. The owner is the
+first of these under which the PR exists: a checkout here whose `origin`
+remote is that repository (the working directory's, one a level down, or
+one of the repository's other worktrees), the current checkout's owner,
+your login (`gh api user --jq .login`), your organizations
+(`gh api user/orgs --jq '.[].login'`). Probe each with
+`gh api repos/<owner>/<repo>/pulls/<n> --jq .html_url`, stop at the first
+that answers, and from there treat it as `<owner>/<repo>#<n>`. Say which
+owner was resolved. If none answers, say which owners were tried and
+stop.
+
 With no PR argument, resolve it from the directory, the same way
 `pr:address` does:
 
@@ -147,6 +158,20 @@ With no PR argument, resolve it from the directory, the same way
    this skill once each, in the order offered.
 
 Say how the PR was chosen whenever it wasn't named on the prompt.
+
+The session is titled by the `auto-title` plugin's hook, which runs on
+the prompt, before this skill does. It finds the PR the same way up to
+the point of choosing: one named on the prompt, the current branch's, or
+the only one among the checkouts here. A PR picked from several
+candidates, by the conversation, by what was already reviewed, or by
+asking, is one the hook could not have known, so that session has no
+title from it, and a bare `/auto-title` replays the same prompt and
+declines again. In that case, add to the line saying how the PR was
+chosen that `/auto-title /pr:review <owner>/<repo>#<n>` names the
+session after it, with the PR filled in. Leave it out in every other
+case, when several PRs were chosen to review in this session, since no
+one of them names it, and when `auto-title:slug` is not among the
+available skills, which means the plugin is not installed.
 
 `--issue=<key>` names the issue the PR belongs to, such as `ABC-123`. It
 is not a decision and is never asked for: it exists so the session can be
